@@ -1,0 +1,12 @@
+{
+  "score": 0.75,
+  "pass": true,
+  "variant": "v1",
+  "features": {
+    "lag_ms":         {"value": 216.7, "band": [120, 450],  "ok": true,  "enabled": true},
+    "err_mean_px":    {"value": 45.2,  "band": [8, 90],     "ok": true,  "enabled": true},
+    "submoves_per_s": {"value": 2.0,   "band": [1.5, 6],    "ok": true,  "enabled": true},
+    "jitter_px":      {"value": 0.4,   "band": [0.8, 6],    "ok": false, "enabled": true},
+    "power_law_beta": {"value": 0.24,  "band": [0.2, 0.45], "ok": true,  "enabled": false}
+  }
+}

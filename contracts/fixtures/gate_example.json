@@ -1,0 +1,11 @@
+{
+  "candidate": "v2",
+  "baseline": "v1",
+  "verdict": "reject",
+  "humans_rejected": {
+    "mouse":    {"total": 9, "candidate": 0, "baseline": 0},
+    "trackpad": {"total": 9, "candidate": 3, "baseline": 0}
+  },
+  "forgeries_passed": {"candidate": 1, "baseline": 7, "total": 24},
+  "reasons": ["rejects 3 of 9 trackpad users (baseline 0)"]
+}

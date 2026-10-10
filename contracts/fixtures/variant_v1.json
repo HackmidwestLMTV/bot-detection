@@ -1,0 +1,15 @@
+{
+  "id": "v1",
+  "parent": null,
+  "author": "operator",
+  "enabled": ["lag_ms", "err_mean_px", "submoves_per_s", "jitter_px"],
+  "pass_threshold": 0.75,
+  "features": {
+    "lag_ms": [120, 450],
+    "err_mean_px": [8, 90],
+    "submoves_per_s": [1.5, 6],
+    "jitter_px": [0.8, 6],
+    "power_law_beta": [0.2, 0.45]
+  },
+  "reason": "starting bands from motor-control literature; recalibrate from human traces"
+}
