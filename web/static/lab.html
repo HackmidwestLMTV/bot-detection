@@ -4,10 +4,42 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Follow It · Lab</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/lab.css">
 </head>
 <body>
-  <!-- Placeholder. Three panels: Agents (live log) | Comparison | Decision. Built in lab.js. -->
-  <main><h1>Lab</h1><p>Dashboard goes here.</p></main>
+  <div id="replay-banner" class="replay-banner" role="alert" hidden>REPLAY · recorded backup run, not live</div>
+  <header class="topbar">
+    <h1>Follow It · Lab</h1>
+    <span id="conn" class="badge conn-off" role="status">connecting…</span>
+    <span id="stub-badge" class="badge badge-stub" hidden>stub scorer</span>
+    <span class="spacer"></span>
+    <button id="btn-red" type="button">Run Red round</button>
+    <button id="btn-blue" type="button">Run Blue round</button>
+    <button id="btn-reset" type="button" class="danger">Reset demo</button>
+  </header>
+  <div id="keyprompt" class="keyprompt" hidden>
+    <form id="keyform">
+      <label for="keyinput">Lab key</label>
+      <input id="keyinput" type="password" autocomplete="off" required>
+      <button type="submit">Save</button>
+      <span id="keymsg" class="keymsg"></span>
+    </form>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <main class="panels">
+    <section class="panel" aria-labelledby="h-agents">
+      <h2 id="h-agents">Agents</h2>
+      <div id="log" class="log" role="log" aria-live="polite" tabindex="0"></div>
+    </section>
+    <section class="panel" aria-labelledby="h-cmp">
+      <h2 id="h-cmp">Comparison</h2>
+      <div id="cmp" class="cmp"></div>
+    </section>
+    <section class="panel" aria-labelledby="h-dec">
+      <h2 id="h-dec">Decision</h2>
+      <div id="decision" class="decision"><p class="muted">Waiting for a candidate variant…</p></div>
+    </section>
+  </main>
+  <script type="module" src="/static/lab.js"></script>
 </body>
 </html>
