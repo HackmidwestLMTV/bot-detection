@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Midnight Static · Tickets</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main>
+    <h1>Midnight Static</h1>
+    <p>Oct 11 · Kansas City</p>
+    <!-- Placeholder: animates seed 42 so path.js can be eyeballed. comet.js replaces this. -->
+    <canvas id="comet" width="600" height="400"></canvas>
+    <button id="skip" type="button">Skip the game</button>
+    <button id="reserve" type="button" disabled>Reserve ticket</button>
+    <p id="status" role="status" aria-live="polite"></p>
+  </main>
+  <script type="module">
+    import { makePath, DURATION_MS } from '/static/path.js';
+    // Console check: makePath(42)(1000) must be [103.824, 209.568]
+    window.makePath = makePath;
+    const ctx = document.getElementById('comet').getContext('2d'), pos = makePath(42);
+    const t0 = performance.now();
+    (function frame(now) {
+      const [x, y] = pos((now - t0) % DURATION_MS);
+      ctx.clearRect(0, 0, 600, 400);
+      ctx.beginPath(); ctx.arc(x, y, 14, 0, 2 * Math.PI); ctx.fillStyle = '#f5c542'; ctx.fill();
+      requestAnimationFrame(frame);
+    })(t0);
+  </script>
+</body>
+</html>

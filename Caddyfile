@@ -1,0 +1,10 @@
+{
+    # Staging CA until DNS resolves; remove this line once the name works (rate limits).
+    acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+followit.example.com {
+    reverse_proxy app:8000 {
+        flush_interval -1        # needed so SSE streams immediately
+    }
+}

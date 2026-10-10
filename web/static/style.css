@@ -1,0 +1,6 @@
+:root { color-scheme: dark; --bg: #0d0f17; --fg: #eef0f6; --accent: #f5c542; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.4 system-ui, sans-serif; }
+main { max-width: 640px; margin: 0 auto; padding: 16px; }
+canvas { width: 100%; height: auto; aspect-ratio: 3 / 2; background: #161a28; border-radius: 12px; touch-action: none; display: block; }
+button { font: inherit; padding: 12px 20px; margin-top: 12px; border-radius: 8px; border: 0; }
