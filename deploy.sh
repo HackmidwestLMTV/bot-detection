@@ -1,28 +1,45 @@
 #!/usr/bin/env bash
-# Run ON THE VM. Deploy-time integration: p1-platform + latest engine/ from p2-engine. Nothing gets committed.
-#   ./deploy.sh            before 11 PM (p1-platform only)
-#   ./deploy.sh engine     from 11 PM (copies engine/ + contracts/ from p2-engine, starts the worker)
-#   BRANCH=main ./deploy.sh   after the final merge
-set -e
-cd ~/followit && git fetch origin
-# -f + clean: a previous `engine` deploy left engine/ and Person 2's contracts/ in the tree
-#   (rm before checkout, so a branch that tracks engine/, like main, gets it restored)
-rm -rf engine && git checkout -f -B deploy "origin/${BRANCH:-p1-platform}"
-if [ "$1" = "engine" ]; then
-  # Person 2's branch is p2, though the contract named it p2-engine. Accept either,
-  # and ENGINE_BRANCH=... overrides, so a rename on their side can't break the deploy.
-  eb="${ENGINE_BRANCH:-}"
-  for c in $eb p2-engine p2; do
-    if git rev-parse --verify -q "origin/$c" >/dev/null; then eb="$c"; break; fi
-  done
-  [ -n "$eb" ] || { echo "no engine branch found on origin (tried: p2-engine p2)"; exit 1; }
-  echo "engine from origin/$eb"
-  git archive "origin/$eb" engine contracts | tar -x   # Person 2's latest engine + contract
-  docker compose --profile engine up -d --build
-else
-  docker compose up -d --build app caddy
+# ON THE VM: bash ~/followit/deploy.sh [engine]
+# BRANCH=main selects the reviewed merged platform; ENGINE_REF defaults to origin/p2.
+set -euo pipefail
+umask 077
+mode="${1:-platform}"
+case "$mode" in platform|engine) ;; *) echo 'Usage: bash deploy.sh [engine]' >&2; exit 2 ;; esac
+FOLLOWIT_DIR="${FOLLOWIT_DIR:-$HOME/followit}"
+cd "$FOLLOWIT_DIR"
+test -s .env || { echo 'Run vm_setup.sh and configure .env first.' >&2; exit 1; }
+git fetch origin
+platform_ref="origin/${BRANCH:-p1-platform}"
+git rev-parse --verify "$platform_ref^{commit}" >/dev/null
+if [ "$mode" = engine ]; then
+  git cat-file -e "${ENGINE_REF:-origin/p2}:engine/Dockerfile"
 fi
-sleep 4
-docker compose logs --tail 50 app | grep -E "using (real engine|stubs)" || echo "WARN: adapter log line not found"
-curl -fsS http://localhost:8000/healthz && echo
-grep -E '^DOMAIN=' .env | sed 's|DOMAIN=|live at https://|'
+
+# Isolated snapshots preserve the operator's branch and uncommitted work.
+release_root="${FOLLOWIT_RELEASES:-$HOME/.local/share/followit/releases}"
+mkdir -p "$release_root"
+release=$(mktemp -d "$release_root/release.XXXXXXXX")
+echo "Deployment snapshot: $release"
+if [ "$mode" = engine ]; then
+  git archive "$platform_ref" | tar --exclude=engine -x -C "$release"
+  git archive "${ENGINE_REF:-origin/p2}" engine | tar -x -C "$release"
+else
+  git archive "$platform_ref" | tar -x -C "$release"
+fi
+ln -s "$FOLLOWIT_DIR/.env" "$release/.env"
+cd "$release"
+compose=(docker compose --project-name followit)
+if [ "$mode" = engine ]; then compose+=(--profile engine); fi
+"${compose[@]}" config --quiet
+services=(app caddy)
+if [ "$mode" = engine ]; then services+=(worker); fi
+# Build before replacing running containers so a failed build leaves them intact.
+"${compose[@]}" build "${services[@]}"
+if [ "$mode" = platform ]; then "${compose[@]}" --profile engine stop worker; fi
+"${compose[@]}" up -d --wait --wait-timeout 120 "${services[@]}"
+if [ "$mode" = engine ]; then
+  "${compose[@]}" exec -T worker python -m engine.worker --check-api
+fi
+curl -fsS http://127.0.0.1:8000/healthz
+echo
+grep -E '^DOMAIN=' .env | sed 's|DOMAIN=|Live at https://|'
