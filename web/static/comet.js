@@ -1,7 +1,7 @@
 // "Follow the comet" game: pure canvas + pointer logic. No network, no page state.
 // runComet(canvas, seed, {onProgress, onStart, signal}) -> Promise<{samples, pointerType}>
 import { makePath, W, H, DURATION_MS } from './path.js';
-import { drawTarget } from './comet-target.js';
+import { drawTarget, targetGeometry } from './comet-target.js';
 
 export const START_RADIUS = 40;   // logical px: pointer must land this close to start
 export const GLOW_RADIUS = 80;    // logical px: visible catch zone
@@ -119,10 +119,16 @@ export function runComet(canvas, seed, { onProgress, onStart, signal, pathVersio
 
     const rect = () => canvas.getBoundingClientRect();
 
+    // The drawn target holds a constant CSS size, so on a narrow phone canvas its ring is
+    // wider in logical px than the fixed START_RADIUS -- measured 61.5 vs 40 on a 312 CSS px
+    // canvas, and real touch probes at 45/55/60 logical px landed inside the visible ring
+    // without arming anything. Never let the catch zone be smaller than what the user sees.
+    const startRadius = () => Math.max(START_RADIUS, targetGeometry(rect().width).radius);
+
     function maybeStart(e) {
       if (state !== 'waiting') return;
       const p = toLogical(e.clientX, e.clientY, rect());
-      if (dist(p, start) > START_RADIUS) return;
+      if (dist(p, start) > startRadius()) return;
       state = 'tracking';
       t0 = performance.now();
       pointerType = e.pointerType || pointerType;
@@ -167,7 +173,7 @@ export function runComet(canvas, seed, { onProgress, onStart, signal, pathVersio
       if (state === 'waiting') {
         const pulse = 0.5 + 0.5 * Math.sin(now / 300);
         ctx.beginPath();
-        ctx.arc(start[0], start[1], START_RADIUS + 6 * pulse, 0, 2 * Math.PI);
+        ctx.arc(start[0], start[1], startRadius() + 6 * pulse, 0, 2 * Math.PI);
         ctx.strokeStyle = `rgba(255, 214, 102, ${0.35 + 0.35 * pulse})`;
         ctx.lineWidth = 2;
         ctx.stroke();
