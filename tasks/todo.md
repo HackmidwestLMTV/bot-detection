@@ -171,5 +171,13 @@ the user later authorized committing everything and directly fixing cross-team c
 - [x] Start the smooth localhost ticket demo and LAN recorder for Luc's phone.
 - [x] Write root phases.md with current state, ownership, verified commands and next steps.
 - [x] Full local verification: 220 passed, two expected skips; frontend13 passed.
-- [ ] Finish CI, merge both reviewed PRs, share phases.md with P1.
+- [x] Finish CI, merge both reviewed PRs, share phases.md with P1.
 - [ ] Get Luc's real smooth-comet/touch feedback and the existing HTTPS endpoint.
+
+## Real phone feedback: fingertip occlusion
+
+- [x] Phone reaches recorder through Luc's hotspot; original Wi-Fi access failed.
+- [x] Replace the old recorder styling with the website design system.
+- [x] Share a CSS-sized target ring and current-direction cue across recorder and checkout.
+- [x] Verify recorder assets and consent behavior (3 tests), frontend regression suite (13 tests), and 390px rendering; both pages load the shared target without browser errors.
+- [x] Luc approved committing/merging the adjustment and handing ownership back to P1; further touch comfort feedback remains a handoff item.

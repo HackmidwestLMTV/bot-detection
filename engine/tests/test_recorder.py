@@ -20,6 +20,8 @@ def test_recorder_consent_unique_save_and_no_implicit_persistence(tmp_path):
     client = TestClient(create_app(traces_dir=folder))
     assert client.get("/dev/recorder").status_code == 200
     assert client.get("/dev/path.js").status_code == 200
+    assert client.get("/dev/comet-target.js").status_code == 200
+    assert client.get("/dev/design-system.css").status_code == 200
     attempt = submit(client)
     assert attempt["saved"] is False and not folder.exists()
     payload = {"attempt_id": attempt["attempt_id"], "consent": False}
