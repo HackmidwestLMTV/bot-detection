@@ -21,6 +21,7 @@ from engine.worker_state import WorkerState
 
 def evidence():
     return {"attempt_id": "human_test_1", "device": "mouse", "nondominant_hand": False,
+            "presentation_version": "plain_ring_v1",
             "features": {"lag_ms": 200, "err_mean_px": 40, "submoves_per_s": 2, "jitter_px": 2, "power_law_beta": .33}}
 
 

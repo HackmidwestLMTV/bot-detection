@@ -9,6 +9,7 @@ from engine.forger import forge_trail
 def submit(client):
     challenge = client.post("/dev/challenges").json()
     response = client.post("/dev/attempts", json={"challenge_id": challenge["challenge_id"],
+        "presentation_version": challenge["presentation_version"],
         "samples": forge_trail(challenge["seed"], path_version=challenge["path_version"]), "device": "mouse", "pointer_type": "mouse"})
     assert response.status_code == 200
     return response.json()
@@ -35,6 +36,7 @@ def test_recorder_consent_unique_save_and_no_implicit_persistence(tmp_path):
     assert trace["tester"] == {"consent": True, "nondominant_hand": True}
     assert trace["cohort"] == "human_test" and trace["device"] == "mouse"
     assert trace["path_version"] == "smooth_v2"
+    assert trace["presentation_version"] == "plain_ring_v1"
     assert attempt["result"]["features"]["err_mean_px"]["value"] < 1e-9
     assert "seed" in trace and len(trace["samples"]) == 181
     second = submit(client)
@@ -48,7 +50,7 @@ def test_expiration_and_bad_attempts(tmp_path):
     client = TestClient(create_app(traces_dir=tmp_path, clock=lambda: now[0]))
     challenge = client.post("/dev/challenges").json()
     payload = {"challenge_id": challenge["challenge_id"], "samples": [[0, 1, 2], [500, 2, 3]],
-               "device": "touch", "pointer_type": "touch"}
+               "device": "touch", "pointer_type": "touch", "presentation_version": challenge["presentation_version"]}
     assert client.post("/dev/attempts", json=payload).status_code == 400
     payload["samples"] = [[0, 1, 2], [3001, 2, 3]]
     assert client.post("/dev/attempts", json=payload).status_code == 400
@@ -67,4 +69,15 @@ def test_missing_javascript_and_strict_consent(tmp_path):
     assert client.get("/healthz").json()["path_js_available"] is False
     attempt = submit(client)
     assert client.post("/dev/recordings", json={"attempt_id": attempt["attempt_id"], "consent": "true"}).status_code == 422
+    assert not list(tmp_path.glob("*.json"))
+
+
+def test_stale_recorder_display_cannot_create_current_recording(tmp_path):
+    client = TestClient(create_app(traces_dir=tmp_path))
+    challenge = client.post("/dev/challenges").json()
+    payload = {"challenge_id": challenge["challenge_id"], "samples": [[0, 1, 2], [3000, 3, 4]],
+               "device": "mouse", "pointer_type": "mouse"}
+    assert client.post("/dev/attempts", json=payload).status_code == 409
+    payload["presentation_version"] = "legacy"
+    assert client.post("/dev/attempts", json=payload).status_code == 409
     assert not list(tmp_path.glob("*.json"))

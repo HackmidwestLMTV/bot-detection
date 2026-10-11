@@ -13,7 +13,8 @@ def test_lab_versions_challenges_and_filters_legacy_evidence():
     variant["path_version"] = "smooth_v2"
     features = {name: sum(band) / 2 for name, band in variant["features"].items()}
     humans = [{"attempt_id": "legacy", "device": "mouse", "features": features},
-              {"attempt_id": "current", "device": "touch", "features": features, "path_version": "smooth_v2"}]
+              {"attempt_id": "current", "device": "touch", "features": features, "path_version": "smooth_v2",
+               "presentation_version": "plain_ring_v1"}]
     app = create_lab_app(variant=variant, humans=humans)
     auth = {"X-Lab-Key": "dev"}
     with TestClient(app) as client:

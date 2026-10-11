@@ -1,5 +1,8 @@
 import os
 
+# A display change needs fresh human evidence even when target motion is unchanged.
+from contracts.presentation import PRESENTATION_VERSION
+
 # Challenge motion is an operator choice, never an AI-proposed scoring rule.
 PATH_VERSION = os.environ.get("PATH_VERSION", "smooth_v2")
 if PATH_VERSION not in ("v1", "smooth_v2"):
@@ -7,6 +10,8 @@ if PATH_VERSION not in ("v1", "smooth_v2"):
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:dev@localhost:5432/followit")
 LAB_KEY = os.environ.get("LAB_KEY", "dev-lab-key")
+RESEARCH_RECORDINGS_DIR = os.environ.get("RESEARCH_RECORDINGS_DIR", "")
+SHADOW_MODEL_DIR = os.environ.get("SHADOW_MODEL_DIR", "")
 
 S3_ENDPOINT = os.environ.get("S3_ENDPOINT")
 S3_BUCKET = os.environ.get("S3_BUCKET", "followit-trails")

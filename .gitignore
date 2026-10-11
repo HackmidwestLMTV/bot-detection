@@ -1,5 +1,13 @@
 .env
 .venv/
+.venv-ml/
+research-data/
+.ml-runs/
+*.invite
+# Keep deployment captures, access material, and invitation QR codes local.
+/release-artifacts/*
+!/release-artifacts/package-research.py
+!/release-artifacts/verify-research-live.py
 __pycache__/
 *.pyc
 .pytest_cache/

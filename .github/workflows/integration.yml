@@ -65,7 +65,9 @@ jobs:
 
       - name: Install test dependencies
         run: |
-          python -m pip install -r web/requirements.txt -r engine/requirements-dev.txt
+          # CPU-only offline model fixtures; no trained weights or model API calls.
+          python -m pip install 'torch>=2.6,<3' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -r web/requirements.txt -r engine/requirements-dev.txt -r engine/requirements-ml.txt
           python -m pip check
 
       - name: Require real engine and reachable disposable PostgreSQL
@@ -115,6 +117,7 @@ jobs:
           )
           PY
           docker compose --profile engine config --quiet
+          docker compose -f compose.yaml -f compose.research.yaml --profile engine config --quiet
           docker compose -f compose.yaml -f engine/compose.worker.yaml --profile engine config --quiet
           docker run --rm -e DOMAIN=localhost -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 

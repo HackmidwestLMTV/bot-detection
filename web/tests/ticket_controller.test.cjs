@@ -20,7 +20,7 @@ async function until(predicate) {
   assert.fail('Controller did not reach the expected state');
 }
 
-function harness({ reduced = false, tester = false, manualWorker = false, route } = {}) {
+function harness({ reduced = false, tester = false, manualWorker = false, route, hash = '' } = {}) {
   const nodes = new Map(), requests = [], workers = [], comets = [];
   const document = {
     activeElement: null,
@@ -58,10 +58,10 @@ function harness({ reduced = false, tester = false, manualWorker = false, route 
   }
   vm.runInNewContext(controller, {
     window: { matchMedia: () => ({ matches: reduced }) }, document, Worker,
-    location: { search: tester ? '?tester=1' : '' }, URLSearchParams,
+    location: { search: tester ? '?tester=1' : '', pathname: '/', hash }, URLSearchParams,
     crypto: webcrypto, Uint8Array, AbortController, DOMException,
     sessionStorage: { getItem: () => null, setItem() {} },
-    makePath: () => () => [100, 100], drawStill() {},
+    makePath: () => () => [100, 100], drawStill() {}, PRESENTATION_VERSION: 'plain_ring_v1',
     runComet: (_canvas, _seed, { signal, pathVersion }) => new Promise((resolve, reject) => {
       comets.push({ resolve, signal, pathVersion });
       signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
@@ -71,7 +71,7 @@ function harness({ reduced = false, tester = false, manualWorker = false, route 
       requests.push({ path, body });
       const custom = await route?.(path, body, requests);
       if (custom) return custom;
-      if (path === '/v1/challenges') return reply({ challenge_id: 'challenge-1', seed: 42 });
+      if (path === '/v1/challenges') return reply({ challenge_id: 'challenge-1', seed: 42, presentation_version: 'plain_ring_v1' });
       if (path.endsWith('/attempt')) return reply({ result: { score: 0 }, token: null });
       if (path === '/v1/pow') return reply({ pow_id: 'puzzle', nonce: 'test-nonce', bits: 8 });
       if (path.endsWith('/solve')) return reply({ token: 'valid-token' });
@@ -80,6 +80,15 @@ function harness({ reduced = false, tester = false, manualWorker = false, route 
   });
   return { el: id => document.getElementById(id), requests, workers, comets, document };
 }
+
+test('research invitation prefills a code without granting consent or issuing a challenge', async () => {
+  const h = harness({ tester: true, hash: '#research=operator_invitation_code_12345&device=touch' });
+  await flush();
+  assert.equal(h.el('research-code').value, 'operator_invitation_code_12345');
+  assert.equal(h.el('training-consent').checked, false);
+  assert.equal(h.el('consent').checked, false);
+  assert.equal(h.requests.length, 0);
+});
 
 for (const entry of ['skip', 'reduced motion', 'scoring failure']) {
   test(`${entry} dispatches and completes real PoW before enabling reserve`, async () => {
@@ -197,7 +206,7 @@ test('playing again clears the earlier pass until the new challenge succeeds', a
 
 test('tester follows the issued path version and sees real feature measurements', async () => {
   const h = harness({ tester: true, route: path => {
-    if (path === '/v1/challenges') return reply({ challenge_id: 'smooth-challenge', seed: 42, path_version: 'smooth_v2' });
+    if (path === '/v1/challenges') return reply({ challenge_id: 'smooth-challenge', seed: 42, path_version: 'smooth_v2', presentation_version: 'plain_ring_v1' });
     if (path.endsWith('/attempt')) return reply({ result: { score: .75, features: {
       lag_ms: { value: 200, enabled: true, ok: true },
       power_law_beta: { value: .33, enabled: false, ok: true },
@@ -214,4 +223,79 @@ test('tester follows the issued path version and sees real feature measurements'
   assert.match(h.el('result').innerHTML, /200.00 ms/);
   assert.match(h.el('result').innerHTML, /Measured only/);
   assert.match(h.el('result').innerHTML, /provisional/);
+});
+
+test('ordinary visitors receive a pass without tester controls or movement measurements', async () => {
+  const h = harness({ route: path => {
+    if (path.endsWith('/attempt')) return reply({ result: { score: .75, features: {
+      lag_ms: { value: 200, enabled: true, ok: true },
+    } }, token: 'visitor-pass' });
+  } });
+  await until(() => h.comets.length === 1);
+  assert.equal(h.el('tester').hidden, true);
+  h.comets[0].resolve({ samples: [[0, 1, 2], [3000, 3, 4]], pointerType: 'mouse' });
+  await until(() => !h.el('reserve').disabled);
+  assert.doesNotMatch(h.el('result').innerHTML, /Reaction delay|score|measurements/);
+  const attempt = h.requests.find(r => r.path.endsWith('/attempt'));
+  assert.equal(attempt.body.cohort, 'organic');
+  assert.equal(attempt.body.tester, undefined);
+});
+
+test('unknown server display falls back without collecting mislabelled movement', async () => {
+  const h = harness({ route: path => {
+    if (path === '/v1/challenges') return reply({ challenge_id: 'future-display', seed: 42, presentation_version: 'future' });
+  } });
+  await until(() => !h.el('reserve').disabled);
+  assert.equal(h.comets.length, 0);
+  assert.equal(h.requests.some(r => r.path.endsWith('/attempt')), false);
+});
+
+test('research code requires training consent and withdrawal cancels collection', async () => {
+  const h = harness({ tester: true });
+  h.el('research-code').value = 'operator-issued-test-code';
+  h.el('consent').checked = true;
+  h.el('tester').device = 'trackpad';
+  h.el('tester').fire('change');
+  await flush();
+  assert.equal(h.requests.length, 0);
+  h.el('training-consent').checked = true;
+  h.el('tester').fire('change');
+  await until(() => h.comets.length === 1);
+  assert.equal(h.requests[0].body.research_consent, 'movement_training_v1');
+  h.el('training-consent').checked = false;
+  h.el('tester').fire('change');
+  assert.equal(h.comets[0].signal.aborted, true);
+  assert.equal(h.requests.some(r => r.path.endsWith('/attempt')), false);
+});
+
+test('research submission binds code, consent and collector to the challenge', async () => {
+  const h = harness({ tester: true, route: path => {
+    if (path.endsWith('/attempt')) return reply({ result: { score: 1 }, token: 'pass', research_recording: 'saved' });
+  } });
+  h.el('research-code').value = 'operator-issued-test-code';
+  h.el('training-consent').checked = true;
+  h.el('consent').checked = true;
+  h.el('tester').device = 'trackpad';
+  h.el('tester').fire('change');
+  await until(() => h.comets.length === 1);
+  h.comets[0].resolve({ samples: [[0, 1, 2], [3000, 3, 4]], pointerType: 'mouse', collectorVersion: 'pointer_v2' });
+  await until(() => !h.el('reserve').disabled);
+  const attempt = h.requests.find(r => r.path.endsWith('/attempt')).body;
+  assert.equal(attempt.research_code, h.requests[0].body.research_code);
+  assert.equal(attempt.session_id, h.requests[0].body.session_id);
+  assert.equal(attempt.collector_version, 'pointer_v2');
+  assert.match(h.el('result').innerHTML, /Research recording saved/);
+});
+
+test('failed research enrollment is explained without silently starting fallback', async () => {
+  const h = harness({ tester: true, route: path => path === '/v1/challenges' ? reply({ detail: 'expired' }, 403) : undefined });
+  h.el('research-code').value = 'operator-issued-test-code';
+  h.el('training-consent').checked = true;
+  h.el('consent').checked = true;
+  h.el('tester').device = 'mouse';
+  h.el('tester').fire('change');
+  await until(() => !h.el('retry').hidden);
+  assert.match(h.el('status').textContent, /research code/);
+  assert.equal(h.comets.length, 0);
+  assert.equal(h.workers.length, 0);
 });

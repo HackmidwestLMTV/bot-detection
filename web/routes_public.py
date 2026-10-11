@@ -5,7 +5,7 @@ import secrets
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from . import config, db, engine_adapter, limits, pow, storage, tokens
+from . import config, db, engine_adapter, limits, pow, storage, tokens, research
 from .common import active_variant, is_lab, new_id
 
 log = logging.getLogger("followit")
@@ -32,12 +32,14 @@ def create_challenge(body: dict, request: Request, x_lab_key: str | None = Heade
     if not is_lab(x_lab_key) and not limits.check_challenge(session_id, request):
         raise HTTPException(429, "too many challenges")
     cid, seed, variant = new_id("ch"), secrets.randbits(32), active_variant()
-    db.exec("""INSERT INTO challenges(id, session_id, seed, variant_id, path_version, expires_at)
-               VALUES (%s, %s, %s, %s, %s, now() + make_interval(secs => %s))""",
-            cid, session_id, seed, variant["id"], config.PATH_VERSION, config.CHALLENGE_TTL_S)
+    enrollment = research.bind(body, session_id)
+    db.exec("""INSERT INTO challenges(id, session_id, seed, variant_id, path_version, presentation_version, scoring_config, expires_at, research_enrollment)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, now() + make_interval(secs => %s), %s)""",
+            cid, session_id, seed, variant["id"], config.PATH_VERSION, config.PRESENTATION_VERSION,
+            db.Json(variant), config.CHALLENGE_TTL_S, enrollment)
     return {"challenge_id": cid, "seed": seed, "variant_id": variant["id"],
             "duration_ms": config.DURATION_MS, "expires_in_s": config.CHALLENGE_TTL_S,
-            "path_version": config.PATH_VERSION}
+            "path_version": config.PATH_VERSION, "presentation_version": config.PRESENTATION_VERSION}
 
 
 def _samples(trail: dict) -> list:
@@ -74,15 +76,21 @@ def attempt(cid: str, trail: dict, x_lab_key: str | None = Header(default=None))
 
     ch = db.one("""UPDATE challenges SET attempts = attempts + 1
                    WHERE id=%s AND expires_at > now() AND attempts < %s
-                   RETURNING session_id, seed, path_version""", cid, config.ATTEMPTS_PER_CHALLENGE)
+                   RETURNING session_id, seed, path_version, presentation_version, scoring_config, research_enrollment""", cid, config.ATTEMPTS_PER_CHALLENGE)
     if not ch:
         live = db.one("SELECT 1 FROM challenges WHERE id=%s AND expires_at > now()", cid)
         if not live:
             raise HTTPException(404, "challenge not found or expired")
         raise HTTPException(429, "too many attempts for this challenge")
 
+    if cohort == "human_test" and trail.get("presentation_version") != ch["presentation_version"]:
+        raise HTTPException(409, "tester display changed or unavailable; reload before recording")
+    participant = research.validate_attempt(ch, trail)
+
     try:
-        result = engine_adapter.score(samples, ch["seed"], {**active_variant(), "path_version": ch["path_version"]})
+        if ch["scoring_config"] is None:
+            raise HTTPException(409, "issued scoring rule unavailable; start a new challenge")
+        result = engine_adapter.score(samples, ch["seed"], {**ch["scoring_config"], "path_version": ch["path_version"]})
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
 
@@ -91,19 +99,37 @@ def attempt(cid: str, trail: dict, x_lab_key: str | None = Header(default=None))
                 for k, v in (result.get("features") or {}).items()}
     aid = new_id("att")
     trail_key = None
-    if cohort == "human_test" and tester.get("consent") is True:
+    if cohort == "human_test" and tester.get("consent") is True and not participant:
         trail_key = storage.put_trail(aid, {**trail, "seed": ch["seed"], "path_version": ch["path_version"],
+                                           "presentation_version": ch["presentation_version"],
                                            "challenge_id": cid})
     db.exec("""INSERT INTO attempts(id, challenge_id, cohort, device, nondominant_hand, round_id,
-                                    features, score, pass, trail_key, path_version)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                    features, score, pass, trail_key, path_version, presentation_version)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             aid, cid, cohort, trail.get("device"), bool(tester.get("nondominant_hand", False)),
             trail.get("round_id") if red else None, db.Json(features),
-            result.get("score"), passed, trail_key, ch["path_version"])
+            result.get("score"), passed, trail_key, ch["path_version"], ch["presentation_version"])
+
+    research_status = None
+    if participant:
+        try:
+            research.save(aid, cid, ch, trail, participant)
+            research_status = "saved"
+        except Exception:
+            log.warning("research recording unavailable for %s", aid)
+            research_status = "storage_unavailable"
+    if config.SHADOW_MODEL_DIR:
+        try:
+            shadow = engine_adapter.shadow(samples, ch["seed"], ch["path_version"], ch["presentation_version"], config.SHADOW_MODEL_DIR)
+            db.exec("UPDATE attempts SET shadow_result=%s WHERE id=%s", db.Json(shadow), aid)
+        except Exception:
+            log.warning("shadow telemetry unavailable for %s; active decision preserved", aid)
 
     token = tokens.issue(ch["session_id"]) if passed and not red else None
-    return {"result": result, "token": token, "fallback": None if passed else "pow",
-            "attempt_id": aid}
+    response = {"result": result, "token": token, "fallback": None if passed else "pow", "attempt_id": aid}
+    if participant:
+        response["research_recording"] = research_status
+    return response
 
 
 @router.post("/v1/pow")

@@ -275,7 +275,7 @@ async function challengeOf(page) {
 export async function openGame(page, { touch = false, viewport = null } = {}) {
   if (viewport) await page.phone(viewport);
   await page.goto('/');
-  await page.waitFor(`document.getElementById('overlay').textContent.includes('finger on the comet')`,
+  await page.waitFor(`document.getElementById('overlay').textContent.includes('inside the ring')`,
     15000, 'the comet to be ready for input');
   const { seed, pathVersion } = await challengeOf(page);
   const tbl = await pathTable(page, seed, pathVersion);
@@ -285,8 +285,8 @@ export async function openGame(page, { touch = false, viewport = null } = {}) {
   return { seed, pathVersion, tbl, rect, toCss, touch };
 }
 
-// A hand, not a robot. The real scorer rejects a pixel-perfect follow (zero lag, zero
-// jitter) exactly as it should, so the test tracks the comet the way a person does:
+// Synthetic input for checking browser/scorer integration, never human evidence.
+// The heuristic rejects zero lag and zero jitter, so this fixture adds:
 // ~200 ms behind, with a small tremor and corrective sub-movements. These numbers were
 // calibrated against engine/scorer.py and variant v1's bands (lag 120-450 ms,
 // err 8-90 px, submoves 1.5-6 /s, jitter 0.8-6 px) and pass on every seed tried.
@@ -570,7 +570,7 @@ try {
     const page = await browser.newPage('c5-pow');
     try {
       await page.goto('/');
-      await page.waitFor(`document.getElementById('overlay').textContent.includes('finger on the comet')`,
+      await page.waitFor(`document.getElementById('overlay').textContent.includes('inside the ring')`,
         15000, 'the game to load');
       await page.clickId('skip');
       await page.waitFor(`document.getElementById('status').textContent.includes('Checking your browser')`,
@@ -632,7 +632,7 @@ try {
       assert(!(await page.hidden('skip')), 'Skip was not offered after the 422');
       // the page must still work: retry starts a fresh challenge rather than wedging
       await page.clickId('retry');
-      await page.waitFor(`document.getElementById('overlay').textContent.includes('finger on the comet')`,
+      await page.waitFor(`document.getElementById('overlay').textContent.includes('inside the ring')`,
         10000, 'a fresh comet after retry');
       return `422 after ${span.toFixed(0)}ms of samples, status "${status}", retry restarts the game`;
     } finally { await page.close(); }

@@ -27,8 +27,9 @@ reinterpret the attempt.
 
 The local recorder issues `smooth_v2` by default and saves its version. Its existing
 scoring bands remain provisional. Calibration selects only the baseline variant's
-version, defaulting to `v1`; request `--path-version smooth_v2` to analyze the new
-cohort. It never pools these two populations. Residual transplantation subtracts
+version. The calibration CLI defaults to `smooth_v2` and `plain_ring_v1`; request
+`--path-version v1 --presentation-version legacy` to audit historical recordings.
+It never pools motion/display populations. Residual transplantation subtracts
 the source recording's own version and adds the requested target version.
 
 `fixtures/path_vectors_smooth_v2.json` is separate from unchanged legacy vectors.

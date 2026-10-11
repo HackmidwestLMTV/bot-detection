@@ -51,7 +51,7 @@ def sid():
 def trail(ms=1500, cohort="organic", **extra):
     samples = [[t, 300.0 + t / 10, 200.0] for t in range(0, ms + 1, 16)]
     return {"samples": samples, "device": "mouse", "pointer_type": "mouse",
-            "cohort": cohort, "round_id": None, **extra}
+            "cohort": cohort, "round_id": None, "presentation_version": config.PRESENTATION_VERSION, **extra}
 
 
 def challenge(client, s, headers=None):

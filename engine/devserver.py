@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, StrictBool
 
 from engine.scorer import normalize_samples, score
 from engine.path import PATH_VERSIONS
+from contracts.presentation import PRESENTATION_VERSION
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -22,6 +23,7 @@ class Attempt(BaseModel):
     samples: list[tuple[float, float, float]] = Field(min_length=2, max_length=10000)
     device: Literal["mouse", "trackpad", "touch"]
     pointer_type: Literal["mouse", "pen", "touch"]
+    presentation_version: str | None = None
 
 
 class SaveRecording(BaseModel):
@@ -50,7 +52,8 @@ def create_app(*, traces_dir=None, path_js=None, clock=time.monotonic, path_vers
 
     @app.get("/healthz")
     def health():
-        return {"status": "ok", "mode": "local_recorder", "path_js_available": path_js.is_file()}
+        return {"status": "ok", "mode": "local_recorder", "path_js_available": path_js.is_file(),
+                "presentation_version": PRESENTATION_VERSION}
 
     @app.get("/dev/recorder")
     def recorder():
@@ -75,9 +78,10 @@ def create_app(*, traces_dir=None, path_js=None, clock=time.monotonic, path_vers
         prune()
         challenge_id = uuid4().hex
         seed = secrets.randbits(32)
-        challenges[challenge_id] = {"seed": seed, "path_version": path_version, "expires": clock() + 120}
+        challenges[challenge_id] = {"seed": seed, "path_version": path_version,
+                                    "presentation_version": PRESENTATION_VERSION, "expires": clock() + 120}
         return {"challenge_id": challenge_id, "seed": seed, "path_version": path_version,
-                "duration_ms": 3000, "expires_in_s": 120}
+                "duration_ms": 3000, "expires_in_s": 120, "presentation_version": PRESENTATION_VERSION}
 
     @app.post("/dev/attempts")
     def attempt(body: Attempt):
@@ -85,6 +89,8 @@ def create_app(*, traces_dir=None, path_js=None, clock=time.monotonic, path_vers
         challenge = challenges.get(body.challenge_id)
         if challenge is None:
             raise HTTPException(404, "challenge missing, expired, or already submitted")
+        if body.presentation_version != challenge["presentation_version"]:
+            raise HTTPException(409, "recorder display changed or unavailable; reload before recording")
         try:
             samples = normalize_samples(body.samples)
             if samples[-1, 0] > 3000:
@@ -96,6 +102,7 @@ def create_app(*, traces_dir=None, path_js=None, clock=time.monotonic, path_vers
         attempt_id = uuid4().hex
         attempts[attempt_id] = {"expires": clock() + 600, "filename": None, "trace": {
             "seed": challenge["seed"], "path_version": challenge["path_version"],
+            "presentation_version": challenge["presentation_version"],
             "samples": samples.tolist(), "device": body.device,
             "pointer_type": body.pointer_type, "cohort": "human_test", "round_id": None,
         }}

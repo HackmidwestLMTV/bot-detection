@@ -38,13 +38,21 @@
 
     <section class="check" aria-labelledby="check-title">
       <div class="card-kicker"><p class="eyebrow">A moment for the humans</p><span class="step">3 SEC</span></div><h2 id="check-title" tabindex="-1">Good music. Real people.</h2>
-      <p class="lede" id="lede">Follow the comet for three seconds to unlock your ticket. You can also skip the game for a browser check.</p>
+      <p class="lede" id="lede">Touch or point at the ball, then follow it for three seconds. You can also skip the game for a browser check.</p>
 
       <form id="tester" class="tester" hidden>
         <p class="tester-title">Tester mode <span id="thanks" class="thanks" hidden></span></p>
+        <p>Use your actual mouse, trackpad, or phone. Follow naturally; unsuccessful attempts are useful too. Aim for 3–5 recordings, then stop. An invitation is for one person in one browser session.</p>
+        <label>Optional research code from the team
+          <input id="research-code" type="password" autocomplete="off" maxlength="100" placeholder="Leave blank for calibration only">
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="training-consent">
+          <span>With a research code, I agree to use this recording to train and evaluate movement models. Raw recordings and exported copies expire after 72 hours. Trained model weights and aggregate results may be retained. Participation is optional.</span>
+        </label>
         <label class="check-row">
           <input type="checkbox" id="consent">
-          <span>I agree to share this movement recording and its measurements with the team for calibration.</span>
+          <span>I agree to share this movement recording and its measurements with the team for calibration. Raw recordings are kept for 72 hours.</span>
         </label>
         <fieldset>
           <legend>What are you using?</legend>
@@ -61,7 +69,7 @@
       </form>
 
       <div class="stage" id="stage">
-        <canvas id="comet" width="600" height="400" aria-label="Comet game: put your finger or pointer on the comet and follow it for 3 seconds. You can skip this with the button below."></canvas>
+        <canvas id="comet" width="600" height="400" aria-label="Touch or point at the ball, then follow it for three seconds. You can skip this with the button below."></canvas>
         <svg class="ring" id="ring" viewBox="0 0 48 48" aria-hidden="true">
           <circle class="ring-track" cx="24" cy="24" r="20"></circle>
           <circle class="ring-fill" id="ring-fill" cx="24" cy="24" r="20"></circle>
@@ -90,10 +98,10 @@
       </div>
       <button type="button" id="reuse" class="linkish" hidden>Try reserving again with the same pass</button>
     </section>
-      <p class="privacy-note">No puzzles to decipher. A browser check is always available.</p>
+      <p class="privacy-note">Movement recordings are saved only with tester consent. The browser check adds computational friction; it does not prove someone is human.</p>
     </div></div>
   </main>
   <footer class="site-footer"><span><strong>Follow It</strong> · Built for Hack Midwest</span><span>Powered by Akamai Cloud · Human approval at the center.</span></footer>
-  <script type="module" src="/static/ticket.js"></script>
+  <script type="module" src="/static/ticket.js?v=research_v1"></script>
 </body>
 </html>

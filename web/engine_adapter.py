@@ -7,6 +7,8 @@ import json
 import logging
 import math
 import pathlib
+from functools import lru_cache
+from time import perf_counter
 
 log = logging.getLogger("followit")
 _GATE_FIXTURE = pathlib.Path(__file__).resolve().parent.parent / "contracts" / "fixtures" / "gate_example.json"
@@ -35,3 +37,26 @@ except ImportError:
 
     def gate(candidate, baseline, humans, forgeries):
         return json.loads(_GATE_FIXTURE.read_text())
+
+
+@lru_cache(maxsize=2)
+def _shadow_model(directory):
+    try:
+        from engine.ml.artifact import Artifact
+        return Artifact(directory)
+    except Exception:
+        log.warning("shadow artifact unavailable; active scorer remains in use")
+        return None
+
+
+def shadow(samples, seed, path_version, presentation_version, directory):
+    """No policy/token access. Cache an immutable artifact until process restart."""
+    started = perf_counter()
+    try:
+        model = _shadow_model(directory)
+        if model is None:
+            return {"status": "unavailable", "mode": "shadow_only"}
+        result = model.score(samples, seed, path_version, presentation_version)
+        return {**result, "elapsed_ms": round((perf_counter() - started) * 1000, 3)}
+    except Exception:
+        return {"status": "error", "mode": "shadow_only"}
