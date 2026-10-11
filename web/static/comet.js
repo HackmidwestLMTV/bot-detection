@@ -102,19 +102,19 @@ function drawComet(ctx, [x, y], tail, glowAlpha = 0.45) {
 }
 
 // Draw the comet resting at its start point, no animation (used for reduced-motion / idle).
-export function drawStill(canvas, seed) {
+export function drawStill(canvas, seed, pathVersion = 'v1') {
   const ctx = setupCanvas(canvas);
   drawBackground(ctx, starfield(seed));
-  drawComet(ctx, makePath(seed)(0), []);
+  drawComet(ctx, makePath(seed, pathVersion)(0), []);
 }
 
 // ---- The game ----
 
-export function runComet(canvas, seed, { onProgress, onStart, signal } = {}) {
+export function runComet(canvas, seed, { onProgress, onStart, signal, pathVersion = 'v1' } = {}) {
   return new Promise((resolve, reject) => {
     const ctx = setupCanvas(canvas);
     const stars = starfield(seed);
-    const pos = makePath(seed);
+    const pos = makePath(seed, pathVersion);
     const start = pos(0);
     let state = 'waiting', t0 = 0, raf = 0, progress = 0, pointerType = '';
     const samples = [], tail = [];

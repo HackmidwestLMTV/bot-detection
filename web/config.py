@@ -1,5 +1,10 @@
 import os
 
+# Challenge motion is an operator choice, never an AI-proposed scoring rule.
+PATH_VERSION = os.environ.get("PATH_VERSION", "smooth_v2")
+if PATH_VERSION not in ("v1", "smooth_v2"):
+    raise ValueError("PATH_VERSION must be v1 or smooth_v2")
+
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:dev@localhost:5432/followit")
 LAB_KEY = os.environ.get("LAB_KEY", "dev-lab-key")
 

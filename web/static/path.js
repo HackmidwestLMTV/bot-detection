@@ -11,7 +11,9 @@ export function mulberry32(seed) {
 }
 export const W = 600, H = 400, DURATION_MS = 3000;
 const AMP_X = [130, 50, 20], AMP_Y = [80, 35, 15];
-export function makePath(seed) {
+export function makePath(seed, pathVersion = 'v1') {
+  if (!['v1', 'smooth_v2'].includes(pathVersion)) throw new Error('unsupported path_version');
+  if (pathVersion === 'smooth_v2') return makeSmoothPath(seed);
   const r = mulberry32(seed);
   const comps = [AMP_X, AMP_Y].map(amps => amps.map(base => {
     const f = 0.10 + r() * 0.25, ph = r() * 2 * Math.PI, amp = base * (0.6 + 0.4 * r());
@@ -32,4 +34,15 @@ export function makePath(seed) {
     }
     return [Math.min(Math.max(x, 30), W - 30), Math.min(Math.max(y, 30), H - 30)];
   };
+}
+
+function makeSmoothPath(seed) {
+  const r = mulberry32(seed);
+  const comps = [[120, 35], [70, 20]].map(amps => amps.map(base => {
+    const f = .08 + .06 * r(), ph = r() * 2 * Math.PI, amp = base * (.8 + .2 * r());
+    return [f, ph, amp];
+  }));
+  // Amplitude sums bound x to145..455/y to110..290; speed stays below158 px/s.
+  return tMs => comps.map((axis, i) => (i === 0 ? W : H) / 2 + axis.reduce(
+    (sum, [f, ph, amp]) => sum + amp * Math.sin(2 * Math.PI * f * tMs / 1000 + ph), 0));
 }

@@ -32,11 +32,12 @@ def create_challenge(body: dict, request: Request, x_lab_key: str | None = Heade
     if not is_lab(x_lab_key) and not limits.check_challenge(session_id, request):
         raise HTTPException(429, "too many challenges")
     cid, seed, variant = new_id("ch"), secrets.randbits(32), active_variant()
-    db.exec("""INSERT INTO challenges(id, session_id, seed, variant_id, expires_at)
-               VALUES (%s, %s, %s, %s, now() + make_interval(secs => %s))""",
-            cid, session_id, seed, variant["id"], config.CHALLENGE_TTL_S)
+    db.exec("""INSERT INTO challenges(id, session_id, seed, variant_id, path_version, expires_at)
+               VALUES (%s, %s, %s, %s, %s, now() + make_interval(secs => %s))""",
+            cid, session_id, seed, variant["id"], config.PATH_VERSION, config.CHALLENGE_TTL_S)
     return {"challenge_id": cid, "seed": seed, "variant_id": variant["id"],
-            "duration_ms": config.DURATION_MS, "expires_in_s": config.CHALLENGE_TTL_S}
+            "duration_ms": config.DURATION_MS, "expires_in_s": config.CHALLENGE_TTL_S,
+            "path_version": config.PATH_VERSION}
 
 
 def _samples(trail: dict) -> list:
@@ -54,20 +55,26 @@ def _samples(trail: dict) -> list:
 
 @router.post("/v1/challenges/{cid}/attempt")
 def attempt(cid: str, trail: dict, x_lab_key: str | None = Header(default=None)):
-    cohort = trail.get("cohort") or "organic"
-    if cohort not in COHORTS:
+    cohort = trail.get("cohort", "organic")
+    if cohort is None:
+        cohort = "organic"
+    if not isinstance(cohort, str) or cohort not in COHORTS:
         raise HTTPException(422, "bad cohort")
     red = cohort == "red"
     if red and not is_lab(x_lab_key):
         raise HTTPException(403, "lab key required for red attempts")
-    if cohort == "human_test" and trail.get("device") not in DEVICES:
+    device = trail.get("device")
+    valid_device = isinstance(device, str) and device in DEVICES
+    if cohort == "human_test" and not valid_device:
         raise HTTPException(422, "human_test requires device mouse, trackpad or touch")
+    if device is not None and not valid_device:
+        raise HTTPException(422, "device must be mouse, trackpad or touch")
     samples = _samples(trail)
     tester = trail.get("tester") if isinstance(trail.get("tester"), dict) else {}
 
     ch = db.one("""UPDATE challenges SET attempts = attempts + 1
                    WHERE id=%s AND expires_at > now() AND attempts < %s
-                   RETURNING session_id, seed""", cid, config.ATTEMPTS_PER_CHALLENGE)
+                   RETURNING session_id, seed, path_version""", cid, config.ATTEMPTS_PER_CHALLENGE)
     if not ch:
         live = db.one("SELECT 1 FROM challenges WHERE id=%s AND expires_at > now()", cid)
         if not live:
@@ -75,7 +82,7 @@ def attempt(cid: str, trail: dict, x_lab_key: str | None = Header(default=None))
         raise HTTPException(429, "too many attempts for this challenge")
 
     try:
-        result = engine_adapter.score(samples, ch["seed"], active_variant())
+        result = engine_adapter.score(samples, ch["seed"], {**active_variant(), "path_version": ch["path_version"]})
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
 
@@ -85,13 +92,14 @@ def attempt(cid: str, trail: dict, x_lab_key: str | None = Header(default=None))
     aid = new_id("att")
     trail_key = None
     if cohort == "human_test" and tester.get("consent") is True:
-        trail_key = storage.put_trail(aid, trail)
+        trail_key = storage.put_trail(aid, {**trail, "seed": ch["seed"], "path_version": ch["path_version"],
+                                           "challenge_id": cid})
     db.exec("""INSERT INTO attempts(id, challenge_id, cohort, device, nondominant_hand, round_id,
-                                    features, score, pass, trail_key)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                    features, score, pass, trail_key, path_version)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             aid, cid, cohort, trail.get("device"), bool(tester.get("nondominant_hand", False)),
             trail.get("round_id") if red else None, db.Json(features),
-            result.get("score"), passed, trail_key)
+            result.get("score"), passed, trail_key, ch["path_version"])
 
     token = tokens.issue(ch["session_id"]) if passed and not red else None
     return {"result": result, "token": token, "fallback": None if passed else "pow",

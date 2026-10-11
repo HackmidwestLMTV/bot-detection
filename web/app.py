@@ -81,12 +81,14 @@ svg{{max-width:100%;height:auto}}code{{font-size:16px;word-break:break-all}}</st
 <body><main><h1>Play a 3-second game?</h1>
 <p>Follow a comet with your finger or mouse. It helps us test a bot check that doesn't lock real people out.</p>
 {svg}<p><code>{html.escape(url)}</code></p>
-<p>We keep only the movement trace, for 72 hours. Nothing else about you.</p></main></body></html>""")
+<p>Recording is optional and requires your consent. Scoring rules are still provisional.</p></main></body></html>""")
 
 
 @app.get("/healthz")
 def healthz():
     traces = {r["device"] or "unknown": r["n"] for r in db.all(
-        "SELECT device, count(*) AS n FROM attempts WHERE cohort='human_test' GROUP BY device")}
+        "SELECT device, count(*) AS n FROM attempts WHERE cohort='human_test' AND path_version=%s GROUP BY device", config.PATH_VERSION)}
+    excluded = db.one("SELECT count(*) AS n FROM attempts WHERE cohort='human_test' AND path_version<>%s", config.PATH_VERSION)["n"]
     return {"ok": True, "engine": "stubs" if USING_STUBS else "real", "active_variant": active_variant()["id"],
+            "path_version": config.PATH_VERSION, "excluded_legacy_human_traces": excluded,
             "human_traces": {"total": sum(traces.values()), **traces}}

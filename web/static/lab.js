@@ -262,10 +262,24 @@ function boot() {
     };
     ok.addEventListener("click", () => decide(true));
     no.addEventListener("click", () => decide(false));
+    ok.disabled = no.disabled = true;
+    out.textContent = "Checking decision status…";
+    api("GET", `/v1/lab/approvals/${encodeURIComponent(d.approval_id)}`).then((approval) => {
+      if (entry.decided) return;
+      if (approval?.status === "approved" || approval?.status === "denied") {
+        setOutcome(d.approval_id, approval.status === "approved");
+      } else if (approval?.status === "pending") {
+        ok.disabled = no.disabled = false;
+        out.textContent = "";
+      } else {
+        out.textContent = "Decision unavailable. Refresh the lab before continuing.";
+      }
+    }).catch(() => { out.textContent = "Unable to verify this decision. Reconnect to continue."; });
   }
   function setOutcome(id, approved) {
     const e = state.approvals.get(id);
     if (!e) return;
+    e.decided = true;
     e.ok.disabled = e.no.disabled = true;
     e.out.textContent = approved ? "✔ Approved" : "✘ Denied";
     e.out.className = "outcome " + (approved ? "ok" : "bad");

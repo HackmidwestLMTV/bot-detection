@@ -4,7 +4,9 @@ services:
     env_file: .env
     restart: unless-stopped
     # --workers 1: the SSE broadcaster and rate limits live in memory
-    command: uvicorn web.app:app --host 0.0.0.0 --port 8000 --workers 1
+    # Only Caddy is public; the VM and this private Compose network are trusted.
+    # Caddy replaces forwarded client IPs. Do not publish app directly to the LAN.
+    command: uvicorn web.app:app --host 0.0.0.0 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
     ports: ["127.0.0.1:8000:8000"] # diagnostic access on the VM; public traffic uses Caddy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5)"]

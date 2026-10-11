@@ -9,6 +9,10 @@ CREATE TABLE IF NOT EXISTS attempts (
   nondominant_hand boolean DEFAULT false, round_id text, features jsonb, score real,
   pass boolean, trail_key text, created_at timestamptz DEFAULT now());
 CREATE INDEX IF NOT EXISTS attempts_cohort ON attempts (cohort, round_id);
+-- Existing recordings/challenges retain their original motion; never relabel them.
+ALTER TABLE challenges ADD COLUMN IF NOT EXISTS path_version text NOT NULL DEFAULT 'v1';
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS path_version text NOT NULL DEFAULT 'v1';
+CREATE INDEX IF NOT EXISTS attempts_path_cohort ON attempts (path_version, cohort);
 
 CREATE TABLE IF NOT EXISTS tokens (
   id text PRIMARY KEY, session_id text NOT NULL, action text NOT NULL,

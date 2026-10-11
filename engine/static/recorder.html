@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Follow It — movement recorder</title>
+<style>
+  :root { color-scheme: dark; font: 16px system-ui, sans-serif; background: #101827; color: #e8edf7; }
+  body { max-width: 780px; margin: 36px auto; padding: 0 18px; }
+  h1 { margin-bottom: 8px; } p { line-height: 1.5; color: #bdc9dc; }
+  canvas { display: block; width: 100%; max-width: 600px; height: auto; background: #07111d; border-radius: 12px; box-shadow: 0 0 0 1px #44546a; touch-action: none; margin: 20px 0; }
+  label { display: block; margin: 12px 0; }
+  button, select { padding: 10px 14px; border: 1px solid #65758b; border-radius: 6px; font: inherit; }
+  button { background: #9ee7d6; color: #10231f; cursor: pointer; } button:disabled { opacity: .45; cursor: default; }
+  #status { min-height: 48px; } table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 10px 4px; text-align: left; border-bottom: 1px solid #39465b; }
+  #save-state { color: #9ee7d6; } .muted { color: #bdc9dc; font-size: .9rem; }
+</style>
+<h1>Follow It</h1>
+<p>Follow the comet for three seconds. This local recorder measures movement using provisional rules; a passing score does not prove someone is human.</p>
+<label>Input device <select id="device"><option value="mouse">Mouse</option><option value="trackpad">Trackpad</option><option value="touch">Touchscreen</option></select></label>
+<button id="new" disabled>New recording</button>
+<p id="status" role="status" aria-live="polite">Loading the comet path…</p>
+<canvas id="trail" width="600" height="400" aria-label="Movement recording area: press on the comet to start, then follow it for three seconds"></canvas>
+<section id="results" hidden>
+  <h2 id="score"></h2>
+  <table><thead><tr><th>Feature</th><th>Value</th><th>Band</th><th>Result</th></tr></thead><tbody id="features"></tbody></table>
+  <label><input id="consent" type="checkbox"> I consent to saving this real human movement recording locally for calibration.</label>
+  <label><input id="nondominant" type="checkbox"> I used my non-dominant hand.</label>
+  <button id="save" disabled>Save recording</button>
+  <p id="save-state" role="status"></p>
+  <p class="muted">Scoring alone does not save a file. Only genuine human recordings belong in the calibration dataset. A recording cannot be performed using only a keyboard.</p>
+</section>
+<script type="module">
+const el = id => document.getElementById(id);
+const canvas = el('trail'), ctx = canvas.getContext('2d');
+let makePath, challenge, path, samples = [], started = null, pointerId = null, last = null, active = false, attemptId = null;
+let device, pointerType, frame;
+async function api(route, body) {
+  const response = await fetch(route, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  const data = await response.json();
+  if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'The server rejected this recording.');
+  return data;
+}
+function message(text) { el('status').textContent = text; }
+function draw(t=0) {
+  ctx.clearRect(0,0,600,400);
+  ctx.strokeStyle='#7694b9'; ctx.lineWidth=2; ctx.beginPath();
+  samples.forEach(([_,x,y],i) => i ? ctx.lineTo(x,y) : ctx.moveTo(x,y)); ctx.stroke();
+  if (!path) return;
+  const [x,y] = path(t); ctx.fillStyle='#9ee7d6'; ctx.beginPath(); ctx.arc(x,y,12,0,2*Math.PI); ctx.fill();
+}
+function position(event) {
+  const r=canvas.getBoundingClientRect();
+  return [Math.max(0,Math.min(600,(event.clientX-r.left)*600/r.width)), Math.max(0,Math.min(400,(event.clientY-r.top)*400/r.height))];
+}
+function cancel(reason) {
+  active=false; challenge=null; cancelAnimationFrame(frame); el('new').disabled=false; el('device').disabled=false; message(reason);
+}
+async function finish() {
+  active=false; samples.push([3000,...last]); const challengeId=challenge.challenge_id; challenge=null;
+  message('Scoring your movement…');
+  try {
+    const data=await api('/dev/attempts',{challenge_id:challengeId,samples,device,pointer_type:pointerType});
+    attemptId=data.attempt_id; const result=data.result;
+    el('score').textContent=`${result.pass ? 'Pass' : 'Below threshold'} · ${Math.round(result.score*100)}%`;
+    el('features').replaceChildren();
+    for(const [name,f] of Object.entries(result.features)) {
+      const tr=document.createElement('tr');
+      for(const value of [name, f.value.toFixed(3), f.band.join(' – '), f.enabled ? (f.ok ? 'Inside band' : 'Outside band') : 'Not scored']) {
+        const td=document.createElement('td'); td.textContent=value; tr.append(td);
+      }
+      el('features').append(tr);
+    }
+    el('results').hidden=false; message('Recording complete. Review your score, then optionally consent and save.');
+  } catch(error) { message(error.message); }
+  challenge=null; el('new').disabled=false; el('device').disabled=false;
+}
+function tick() {
+  if(!active) return;
+  const t=Math.min(3000,performance.now()-started); draw(t);
+  if(t>=3000) { finish(); return; }
+  frame=requestAnimationFrame(tick);
+}
+el('new').onclick=async () => {
+  el('new').disabled=true; el('results').hidden=true; el('consent').checked=false;
+  el('nondominant').checked=false; el('save').disabled=true; el('save-state').textContent=''; attemptId=null; samples=[];
+  try { challenge=await api('/dev/challenges',{}); path=makePath(challenge.seed,challenge.path_version||'v1'); draw(); message('Press on the comet to start. Follow it for three seconds; keep your finger down on touchscreens.'); }
+  catch(error) { message(error.message); el('new').disabled=false; }
+};
+canvas.onpointerdown=event => {
+  if(!challenge || active || event.isPrimary===false) return;
+  last=position(event); const target=path(0);
+  if(Math.hypot(last[0]-target[0],last[1]-target[1])>35) { message('Press on the green comet to begin.'); return; }
+  event.preventDefault(); pointerId=event.pointerId; canvas.setPointerCapture(pointerId);
+  pointerType=event.pointerType || 'mouse';
+  device=pointerType==='touch' ? 'touch' : el('device').value; el('device').value=device; el('device').disabled=true;
+  started=performance.now(); samples=[[0,...last]]; active=true; message('Follow the comet…'); tick();
+};
+canvas.onpointermove=event => {
+  if(!active || event.pointerId!==pointerId) return;
+  const events=event.getCoalescedEvents?.() || [];
+  for(const sample of events.length ? events : [event]) {
+    const t=Math.max(0,Math.min(3000,sample.timeStamp-started));
+    if(t < samples[samples.length-1][0]) continue;
+    last=position(sample); samples.push([t,...last]);
+  }
+};
+canvas.onpointerup=event => { if(active && event.pointerId===pointerId && pointerType!=='mouse') cancel('Contact ended early. Choose New recording and keep contact for three seconds.'); };
+canvas.onpointercancel=() => { if(active) cancel('Recording interrupted. Choose New recording to retry.'); };
+document.onvisibilitychange=() => { if(document.hidden && active) cancel('Recording interrupted because the page was hidden. Please retry.'); };
+el('consent').onchange=() => { el('save').disabled=!el('consent').checked || !attemptId; };
+el('save').onclick=async () => {
+  el('save').disabled=true;
+  try {
+    const data=await api('/dev/recordings',{attempt_id:attemptId,consent:el('consent').checked,nondominant_hand:el('nondominant').checked});
+    el('save-state').textContent=`Saved locally: ${data.filename}`; attemptId=null;
+  } catch(error) { el('save-state').textContent=error.message; el('save').disabled=!el('consent').checked; }
+};
+try { ({makePath}=await import('/dev/path.js')); el('new').disabled=false; message('Choose your input device, then select New recording.'); }
+catch { message('The comet path could not load. Run engine/prepare-recorder.ps1, then reload this page.'); }
+</script>
+</html>
