@@ -28,3 +28,34 @@ assert this in an offline HTTP transport test before rerunning live checks.
 Strands 1.59 may return `tool_use` when it has already produced validated
 structured output. Check the typed report and expected facts; do not require
 `end_turn` for this path. Ordinary tool loops must still finish their turn.
+
+## Lesson: Do not assume TestClient and SDK response classes are identical
+
+Starlette can use httpx2 while the model SDK uses httpx. Convert the test server's
+response explicitly when bridging it into an httpx MockTransport; otherwise a
+valid synchronous response can produce a misleading async-handler TypeError.
+
+## Lesson: Derive round evidence from executed tools
+
+Model-generated counts and evidence IDs can be incorrect even in a valid typed
+report. Build final counts, best parameters, and evidence from recorded tool
+results; retain generated prose only as commentary.
+
+## Lesson: Short smoke checks do not establish round latency
+
+The provider completed the short Phase 2 smoke suite but a multi-tool Red round
+timed out when finishing its report. Record the underlying exception type, test
+an explicit bounded worker timeout, and verify full-round completion separately.
+
+## Lesson: Do not require a model summary after successful activation
+
+The live Blue tool activated its approved candidate, but the next model call timed
+out while summarizing it. Stop the SDK loop after confirmed activation and build
+the final report from observed actions. Keep historical errors visible when a
+report is recovered from server evidence.
+
+## Lesson: Client approval checks do not replace atomic server enforcement
+
+A worker can verify the gate and evidence before activation, but the server must
+bind and consume approval atomically to protect direct callers and concurrent
+changes. Report that integration gap rather than claiming deployment validation.
