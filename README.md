@@ -9,7 +9,7 @@ The full contract between the two halves is in [contracts/CONTRACT.md](contracts
 
 ## Akamai services used
 - **Linode VM** (g6-standard-2): app, agent worker and Caddy, all under Docker Compose.
-- **Managed PostgreSQL 17**: challenges, attempts (features only), tokens, variants, approvals, gate decisions, lab events.
+- **Managed PostgreSQL 18**: challenges, attempts (features only), tokens, variants, approvals, gate decisions, lab events.
 - **Object Storage** (`followit-trails`, us-sea-1): raw movement traces, kept only from consenting testers and only for 72 hours.
 - **Hosted inference** (`ws.akamai-workshops.com`): the model behind the Red and Blue Strands agents.
 
@@ -45,15 +45,41 @@ curl -s https://$DOMAIN/healthz          # engine mode, active variant, human tr
 Print `https://$DOMAIN/qr` for the table. It's a QR code to tester mode (`/?tester=1`).
 
 ## Deploy (Linode)
-1. Create the VM (Ubuntu 24.04), Managed Postgres 17 (add the VM's IP to its allow list), and the bucket plus a key scoped to it. The Cloud Firewall must allow TCP 22, 80 and 443.
+1. Create the Managed Postgres **first**, because it takes 5–10 minutes to provision (details below). While it provisions, create the VM (Ubuntu 24.04, `g6-standard-2`) and the bucket plus a key scoped to it. The Cloud Firewall must allow TCP 22, 80 and 443.
 2. On the VM, as root: `bash vm_setup.sh`. It installs Docker, clones the repo, and writes `.env` with a fresh `LAB_KEY` and `DOMAIN=<ip-with-dashes>.sslip.io`, so HTTPS works with no DNS setup.
 3. Fill `DATABASE_URL`, `S3_KEY`, `S3_SECRET` and `AKAMAI_API_KEY` in `~/followit/.env`.
 4. `~/followit/deploy.sh` (platform only), or `~/followit/deploy.sh engine` (adds Person 2's latest `engine/` and the worker), or `BRANCH=main ~/followit/deploy.sh` after the final merge.
 
+### Managed Postgres
+1. In Cloud Manager (cloud.linode.com), go to **Databases → Create Database Cluster**.
+2. Fill in the form:
+   - **Label:** `followit-db`
+   - **Engine:** PostgreSQL **18**. The app is tested on 17 and 18.
+   - **Region:** Seattle (`us-sea`), the same region as the VM and the bucket.
+   - **Plan:** Shared CPU, **Nanode 1 GB** (`g6-nanode-1`).
+   - **Cluster size:** 1 node.
+   - **Allowed IPs:** the VM's public IPv4. If the VM doesn't exist yet, add its IP later. Until an IP is on the list, every connection is refused.
+3. When the status is **Active**, copy the host, port, username and password from **Connection Details**. Then set this in `.env`, URL-encoding any `@ : /` characters in the password:
+   ```
+   DATABASE_URL=postgresql://USERNAME:PASSWORD@HOST:PORT/defaultdb?sslmode=require
+   ```
+4. Check the connection from the VM:
+   ```bash
+   docker run --rm postgres:18 psql "$DATABASE_URL" -c "select version();"
+   ```
+   If the command hangs, the VM's IP isn't on the allow list. If you get an SSL error, `?sslmode=require` is missing. The app creates its tables on startup, so there's no SQL to run.
+
+CLI alternative:
+```bash
+linode-cli databases engines --text | grep -i postgres    # exact engine id for v18
+linode-cli databases postgresql-create --label followit-db --region us-sea --type g6-nanode-1 \
+  --cluster_size 1 --engine postgresql/18 --allow_list <VM_IP>/32   # use the engine id printed above
+```
+
 ## Local dev
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r web/requirements.txt
-cp .env.example .env && set -a && . ./.env && set +a      # point DATABASE_URL at any Postgres 17
+cp .env.example .env && set -a && . ./.env && set +a      # point DATABASE_URL at any Postgres 17 or 18
 .venv/bin/uvicorn web.app:app --reload --port 8000
 .venv/bin/pytest                                           # API tests skip without Postgres
 python -m web.dev.replay_events --reset                    # play the fixture lab cycle into /lab

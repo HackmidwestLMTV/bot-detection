@@ -21,7 +21,7 @@ services:
     volumes: ["./Caddyfile:/etc/caddy/Caddyfile", "caddy_data:/data"]
     depends_on: [app]
   db:                          # local dev only: `docker compose --profile local up -d db`
-    image: postgres:17
+    image: postgres:18
     environment: { POSTGRES_PASSWORD: dev, POSTGRES_DB: followit }
     ports: ["5432:5432"]
     profiles: ["local"]
