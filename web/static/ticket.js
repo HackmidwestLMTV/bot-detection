@@ -1,6 +1,6 @@
 // Ticket page controller: session, API calls, comet -> attempt, PoW fallback, reserve, tester mode.
 import { makePath } from './path.js';
-import { runComet, drawStill } from './comet.js';
+import { runComet, drawStill, PRESENTATION_VERSION } from './comet.js?v=research_v1';
 
 // Console check: makePath(42)(1000) must be [103.824, 209.568]
 window.makePath = makePath;
@@ -12,6 +12,7 @@ const el = {
   skip: $('skip'), retry: $('retry'), result: $('result'), status: $('status'), checkTitle: $('check-title'),
   reserve: $('reserve'), reserveMsg: $('reserve-msg'), verifyAgain: $('verify-again'),
   confirm: $('confirm'), rid: $('rid'), reuse: $('reuse'),
+  researchCode: $('research-code'), trainingConsent: $('training-consent'),
 };
 
 const TESTER = new URLSearchParams(location.search).get('tester') === '1';
@@ -104,7 +105,8 @@ function setPassed(token, msg) {
 
 // ---- tester mode ----
 function testerDevice() { return el.tester.querySelector('input[name="device"]:checked')?.value || null; }
-function testerReady() { return el.consent.checked && !!testerDevice(); }
+function researchCode() { return (el.researchCode?.value || '').trim(); }
+function testerReady() { return el.consent.checked && !!testerDevice() && (!researchCode() || el.trainingConsent?.checked); }
 function updateThanks() {
   if (!S.thanks) return;
   el.thanks.hidden = false;
@@ -112,9 +114,24 @@ function updateThanks() {
 }
 if (TESTER) {
   el.tester.hidden = false;
+  const invite = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+  const code = invite.get('research');
+  if (code && /^[A-Za-z0-9_-]{20,100}$/.test(code)) {
+    el.researchCode.value = code;
+    const device = invite.get('device');
+    if (['mouse', 'trackpad', 'touch'].includes(device)) {
+      const choice = el.tester.querySelector(`input[name="device"][value="${device}"]`);
+      if (choice) choice.checked = true;
+    }
+    // Keep the code in this form only; participants still choose both consent boxes.
+    window.history?.replaceState(null, '', location.pathname + location.search);
+  }
   try { S.thanks = +sessionStorage.getItem('followit_thanks') || 0; } catch { /* ignore */ }
   updateThanks();
   el.tester.addEventListener('submit', e => e.preventDefault());
+  el.researchCode.addEventListener('input', () => {
+    if (S.challengeActive) waitForTester();
+  });
   el.tester.addEventListener('change', () => {
     // Nothing is fetched or sent until consent is ticked and a device is picked.
     if (testerReady() && !S.challengeActive && !S.worker && el.reserve.disabled && el.retry.hidden) startChallenge();
@@ -124,7 +141,8 @@ if (TESTER) {
 function waitForTester() {
   stopEverything();
   drawStill(el.canvas, 42);
-  overlay(el.consent.checked ? 'Pick your device above to start' : 'Tick the box above to start');
+  overlay(researchCode() && !el.trainingConsent?.checked ? 'Research participation needs the training consent above'
+    : el.consent.checked ? 'Pick your device above to start' : 'Tick the box above to start');
 }
 
 // ---- comet flow ----
@@ -142,11 +160,25 @@ async function startChallenge() {
   say('');
   overlay('Loading…');
   let ch;
+  const deviceAtStart = TESTER ? testerDevice() : null;
   try {
-    const r = await post('/v1/challenges', { session_id: SESSION });
+    const research = TESTER && researchCode() ? { research_code: researchCode(), research_consent: 'movement_training_v1' } : {};
+    const r = await post('/v1/challenges', { session_id: SESSION, ...research });
     if (gen !== S.gen) return;
-    if (!r.ok || !r.data?.challenge_id) return startPow('challenge_failed');
+    if (!r.ok || !r.data?.challenge_id) {
+      if (research.research_code) {
+        S.challengeActive = false;
+        overlay('Research enrollment unavailable');
+        say('Check your research code and consent, or ask the operator to check storage.');
+        showRetry('Try enrollment again', startChallenge);
+        return;
+      }
+      return startPow('challenge_failed');
+    }
     ch = r.data;
+    ch.researchCode = research.research_code;
+    ch.device = deviceAtStart;
+    if (ch.presentation_version !== PRESENTATION_VERSION) return startPow('unsupported_display');
   } catch {
     if (gen === S.gen) startPow('network');
     return;
@@ -154,7 +186,7 @@ async function startChallenge() {
 
   // Keep the prompt pill away from the comet so it never hides it.
   el.overlay.classList.toggle('top', makePath(ch.seed >>> 0, ch.path_version || 'v1')(0)[1] > 200);
-  overlay('Put your finger on the comet');
+  overlay('Touch or point inside the ring');
   const ac = new AbortController();
   S.abort = ac;
   let run;
@@ -172,6 +204,7 @@ async function startChallenge() {
   S.abort = null;
   // Consent/device may have changed while the challenge was loading or running.
   if (TESTER && !testerReady()) return waitForTester();
+  if (TESTER && ch.device !== testerDevice()) return waitForTester();
   try {
     await submitAttempt(ch, run, gen);
   } finally {
@@ -195,7 +228,7 @@ function featureResults(result) {
     <p class="muted">These bands are provisional. A score describes this attempt; it does not prove whether someone is human.</p>` : '';
 }
 
-async function submitAttempt(ch, { samples, pointerType }, gen) {
+async function submitAttempt(ch, { samples, pointerType, collectorVersion }, gen) {
   overlay('');
   say('One moment…');
   const pointer_type = normPointer(pointerType);
@@ -205,8 +238,14 @@ async function submitAttempt(ch, { samples, pointerType }, gen) {
     pointer_type,
     cohort: TESTER ? 'human_test' : 'organic',
     round_id: null,
+    presentation_version: PRESENTATION_VERSION,
   };
   if (TESTER) trail.tester = { consent: el.consent.checked, nondominant_hand: el.nondominant.checked };
+  if (ch.researchCode) {
+    if (!el.trainingConsent.checked || researchCode() !== ch.researchCode) return waitForTester();
+    Object.assign(trail, { session_id: SESSION, research_code: ch.researchCode,
+      research_consent: 'movement_training_v1', collector_version: collectorVersion });
+  }
 
   let r;
   try {
@@ -236,7 +275,9 @@ async function submitAttempt(ch, { samples, pointerType }, gen) {
     updateThanks();
     const score = typeof result.score === 'number' ? result.score.toFixed(2) : '–';
     showResult(`<p><strong>${token ? 'Passed' : 'Not a pass this time'}</strong> · score ${score}</p>
-      ${featureResults(result)}<p class="muted">Thank you. This attempt's measurements were recorded with your consent.</p>`);
+      ${featureResults(result)}<p class="muted">${ch.researchCode
+        ? (r.data.research_recording === 'saved' ? 'Research recording saved with your consent for up to 72 hours.' : 'The research recording could not be saved. Ask the operator to check storage.')
+        : "Thank you. This attempt's measurements were recorded with your consent."}</p>`);
     showRetry('Play again', startChallenge);
     if (token) setPassed(token, "You're through. You can reserve now, or play again.");
     else { overlay(''); say('Your score is ready. Play again, or skip to reserve.'); el.skip.hidden = false; }

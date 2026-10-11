@@ -2,6 +2,7 @@
 !engine/
 !engine/**
 !contracts/
+!contracts/*.py
 !contracts/fixtures/
 !contracts/fixtures/variant_v1.json
 engine/.state/

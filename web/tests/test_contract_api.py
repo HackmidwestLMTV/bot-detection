@@ -31,17 +31,22 @@ def test_healthz(client):
     assert "total" in r.json()["human_traces"]
 
 
-def test_qr_page_points_at_tester_mode(client):
+def test_qr_pages_separate_checkout_and_calibration(client):
     r = client.get("/qr")
+    assert r.status_code == 200 and "<svg" in r.text and "/?tester=1" not in r.text
+    assert "No payment" in r.text
+    r = client.get("/qr/tester")
     assert r.status_code == 200 and "<svg" in r.text and "/?tester=1" in r.text
+    assert "72 hours" in r.text
 
 
 def test_challenge_keys(client):
     r = client.post("/v1/challenges", json={"session_id": "s_test"})
     assert r.status_code == 200
     body = r.json()
-    assert set(body) == {"challenge_id", "seed", "variant_id", "duration_ms", "expires_in_s", "path_version"}
+    assert set(body) == {"challenge_id", "seed", "variant_id", "duration_ms", "expires_in_s", "path_version", "presentation_version"}
     assert body["path_version"] == config.PATH_VERSION
+    assert body["presentation_version"] == config.PRESENTATION_VERSION
     assert body["duration_ms"] == 3000 and body["expires_in_s"] == 120
     assert 0 <= body["seed"] < 2**32
 

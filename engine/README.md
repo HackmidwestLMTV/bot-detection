@@ -21,10 +21,15 @@ Keep touch/pen contact until the recording ends. Scoring does not write a file.
 Check the consent box and select **Save recording** to save a genuine human trace
 in `contracts/fixtures/human_traces/team_<unique-id>.json`.
 
-The save includes `seed`, `samples`, `device`, `pointer_type`, `cohort: human_test`,
+The save includes `seed`, `path_version`, `presentation_version: plain_ring_v1`,
+`samples`, `device`, `pointer_type`, `cohort: human_test`,
 `round_id: null`, and `tester: {consent: true, nondominant_hand: ...}`. An unsaved
 attempt expires after ten minutes or a server restart. Saved recordings persist.
 Browser automation and generated traces must never be saved to this dataset.
+Legacy recordings are excluded from new-display calibration and gates. Collect
+fresh mouse, trackpad, and real-touch recordings after changing the display.
+The ball and ring have no direction arrow or movement trail. The start area
+covers the visible ring at phone sizes.
 Mouse versus trackpad cannot be inferred from pointer events; select it manually.
 
 For a phone on the same trusted Wi-Fi, start with `--host 0.0.0.0` and visit

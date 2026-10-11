@@ -1,9 +1,14 @@
 .git
+release-artifacts
 .env
 .env.*
 **/.env
 **/.env.*
 **/.venv
+**/.venv-ml
+**/.ml-runs
+**/research-data
+**/*.invite
 **/venv
 **/__pycache__
 **/*.pyc

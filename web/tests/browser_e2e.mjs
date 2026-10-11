@@ -250,8 +250,8 @@ export class Page {
 
 // Dense table of comet positions from the page's own makePath, so the test follows
 // exactly the path the page drew.
-export async function pathTable(page, seed) {
-  return page.eval(`(()=>{const p=window.makePath(${seed}>>>0);const a=[];
+export async function pathTable(page, seed, pathVersion = 'v1') {
+  return page.eval(`(()=>{const p=window.makePath(${seed}>>>0,${JSON.stringify(pathVersion)});const a=[];
     for(let t=0;t<=${DURATION_MS + 400};t+=4)a.push(p(t));return a})()`);
 }
 function posAt(tbl, t) {
@@ -259,30 +259,34 @@ function posAt(tbl, t) {
   return tbl[i];
 }
 
-async function seedOf(page) {
+// The server pins the path version per challenge (config.PATH_VERSION, currently smooth_v2)
+// and scores against it, so the test must follow THAT curve. Reading it from the challenge
+// response rather than hardcoding keeps this suite correct across future path versions --
+// following the wrong curve inflates err_mean_px and fails the attempt for the wrong reason.
+async function challengeOf(page) {
   const r = page.lastReq('/v1/challenges');
   assert(r, 'no POST /v1/challenges was made');
   const body = JSON.parse(await page.responseBody(r.id));
   assert(Number.isFinite(body.seed), `challenge response had no seed: ${JSON.stringify(body)}`);
-  return body.seed;
+  return { seed: body.seed, pathVersion: body.path_version || 'v1' };
 }
 
 // Open the page and wait until runComet is listening for input.
 export async function openGame(page, { touch = false, viewport = null } = {}) {
   if (viewport) await page.phone(viewport);
   await page.goto('/');
-  await page.waitFor(`document.getElementById('overlay').textContent.includes('finger on the comet')`,
+  await page.waitFor(`document.getElementById('overlay').textContent.includes('inside the ring')`,
     15000, 'the comet to be ready for input');
-  const seed = await seedOf(page);
-  const tbl = await pathTable(page, seed);
+  const { seed, pathVersion } = await challengeOf(page);
+  const tbl = await pathTable(page, seed, pathVersion);
   const rect = await page.rect('#comet');
   // logical canvas px -> viewport CSS px
   const toCss = ([lx, ly]) => [rect.x + lx * rect.w / W, rect.y + ly * rect.h / H];
-  return { seed, tbl, rect, toCss, touch };
+  return { seed, pathVersion, tbl, rect, toCss, touch };
 }
 
-// A hand, not a robot. The real scorer rejects a pixel-perfect follow (zero lag, zero
-// jitter) exactly as it should, so the test tracks the comet the way a person does:
+// Synthetic input for checking browser/scorer integration, never human evidence.
+// The heuristic rejects zero lag and zero jitter, so this fixture adds:
 // ~200 ms behind, with a small tremor and corrective sub-movements. These numbers were
 // calibrated against engine/scorer.py and variant v1's bands (lag 120-450 ms,
 // err 8-90 px, submoves 1.5-6 /s, jitter 0.8-6 px) and pass on every seed tried.
@@ -415,12 +419,21 @@ function spanOf(points) {
 function assertLogicalPx(st, run) {
   assert(st.minX >= 0 && st.maxX <= W, `x out of logical range [0,${W}]: [${st.minX.toFixed(1)}, ${st.maxX.toFixed(1)}]`);
   assert(st.minY >= 0 && st.maxY <= H, `y out of logical range [0,${H}]: [${st.minY.toFixed(1)}, ${st.maxY.toFixed(1)}]`);
-  // A CSS-px leak squashes the trail by rect.width/600 (0.52x on a phone). The recorded
-  // trail must span as much of the canvas as the pointer actually covered.
+  // A CSS-px leak squashes the trail by rect.width/600 (0.52x on a phone). Two guards,
+  // and the first is the real one:
+  //
+  //  1. st.meanErr -- per-sample distance from where the pointer was actually driven,
+  //     matched on timestamp. A scale leak makes this hundreds of px; it reads ~0.1 px.
+  //     Asserted by the caller.
+  //  2. The span ratio below. This one only bounds a GROSS squash, because synthesized
+  //     pointer events are coalesced and occasionally dropped when the main thread is
+  //     busy drawing, which clips the extremes of the sweep. A 0.9 floor made the check
+  //     flake at 79-84% on main and on PR #5 alike -- a harness artifact, not a app
+  //     regression. Keep it loose; guard #1 is what actually detects a leak.
   const [sx, sy] = spanOf(run.commanded);
   const gx = (st.maxX - st.minX) / sx, gy = (st.maxY - st.minY) / sy;
-  assert(gx > 0.9 && gx < 1.1, `x span is ${(gx * 100).toFixed(0)}% of what the pointer covered - samples look scaled, not logical`);
-  assert(gy > 0.9 && gy < 1.1, `y span is ${(gy * 100).toFixed(0)}% of what the pointer covered - samples look scaled, not logical`);
+  assert(gx > 0.6 && gx < 1.1, `x span is ${(gx * 100).toFixed(0)}% of what the pointer covered - samples look scaled, not logical`);
+  assert(gy > 0.6 && gy < 1.1, `y span is ${(gy * 100).toFixed(0)}% of what the pointer covered - samples look scaled, not logical`);
 }
 
 // ---------------------------------------------------------------- the checks
@@ -557,7 +570,7 @@ try {
     const page = await browser.newPage('c5-pow');
     try {
       await page.goto('/');
-      await page.waitFor(`document.getElementById('overlay').textContent.includes('finger on the comet')`,
+      await page.waitFor(`document.getElementById('overlay').textContent.includes('inside the ring')`,
         15000, 'the game to load');
       await page.clickId('skip');
       await page.waitFor(`document.getElementById('status').textContent.includes('Checking your browser')`,
@@ -619,7 +632,7 @@ try {
       assert(!(await page.hidden('skip')), 'Skip was not offered after the 422');
       // the page must still work: retry starts a fresh challenge rather than wedging
       await page.clickId('retry');
-      await page.waitFor(`document.getElementById('overlay').textContent.includes('finger on the comet')`,
+      await page.waitFor(`document.getElementById('overlay').textContent.includes('inside the ring')`,
         10000, 'a fresh comet after retry');
       return `422 after ${span.toFixed(0)}ms of samples, status "${status}", retry restarts the game`;
     } finally { await page.close(); }

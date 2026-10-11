@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>Follow It · Research collection</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f3ef;color:#18242d;font:16px/1.55 system-ui,sans-serif}
+main{max-width:880px;margin:auto;padding:28px 20px}a{color:#90380f}h1{line-height:1.15;font-size:38px}h2{font-size:22px}
+.card{background:white;border:1px solid #d8d9d4;border-radius:16px;padding:24px;margin:20px 0}.badge{display:inline-block;background:#e4ecdf;padding:5px 12px;border-radius:20px;font-weight:650}
+label{display:block;font-weight:600;margin:16px 0 6px}input,select,button{font:inherit;border:1px solid #a3aaa9;border-radius:8px;padding:11px;max-width:100%}input{width:100%}button{cursor:pointer;background:#18242d;color:white;margin:12px 8px 0 0}button:disabled{opacity:.5}button.secondary{background:#fff;color:#18242d}small{display:block;color:#57636a}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px 4px;border-bottom:1px solid #ddd}#qr{width:256px;max-width:100%;background:#fff}#invite-url{overflow-wrap:anywhere}#status{min-height:1.5em}.error{color:#a32121}[hidden]{display:none!important}
+</style></head><body><main>
+<a href="/">← Ticket demo</a> · <a href="/?tester=1">Calibration tester</a>
+<h1>Collect real movement.</h1><span class="badge">Models: shadow only</span>
+<p>Invite people to record with a real mouse, trackpad, or phone. Checkout continues using the active deterministic policy. New model outputs cannot approve or reject visitors.</p>
+<section class="card"><h2>Operator access</h2>
+<label for="operator-key">Operator key</label><input id="operator-key" type="password" autocomplete="off" spellcheck="false">
+<small>Use the existing lab key. It stays in this page’s memory and is sent only to this app in an authentication header. Never share it with participants.</small>
+<button id="refresh">Check collection status</button><button class="secondary" id="lock">Clear key and invitation</button>
+<p id="status" role="status" aria-live="polite"></p>
+<div id="coverage" hidden><p id="model-status"></p><table><thead><tr><th>Device</th><th>Recordings</th><th>Evidence</th></tr></thead><tbody id="counts"></tbody></table><p>Private storage · 72-hour raw recording retention. Counts are collection coverage, not validated model performance.</p></div>
+</section>
+<section class="card"><h2>Create a participant invitation</h2>
+<p>Use a different random ID for each person. Reuse that person’s ID when issuing another invitation for a different device or browser. Do not enter names or email addresses.</p>
+<label for="participant">Pseudonymous participant ID</label><input id="participant" pattern="[A-Za-z0-9_-]{8,100}" maxlength="100" autocomplete="off">
+<button class="secondary" id="new-person">New person</button>
+<label for="device">Actual device</label><select id="device"><option value="mouse">Mouse</option><option value="trackpad">Trackpad</option><option value="touch">Phone / real touch</option></select>
+<p>Each invitation expires in 24 hours, allows up to 30 challenges, and binds to the first browser session that starts a consented challenge. Ask for 3–5 natural attempts, including misses. Do not use automation.</p>
+<button id="create">Create invitation</button>
+<div id="invitation" hidden><h2>Ready for this participant</h2><p id="invite-person"></p><img id="qr" alt="Scan to open this participant’s tester invitation"><p><a id="invite-url" target="_blank" rel="noopener noreferrer"></a></p><button class="secondary" id="copy">Copy invitation link</button><p>Send only this link or show this QR code. Opening it preselects the device; the participant must give consent before collection begins. Generate a new invitation for each device/browser.</p></div>
+</section>
+<p>RF, CNN, and LSTM candidates need genuine consented data, participant-separated evaluation, and an independent review before any future activation. Missing device coverage stays “untested.”</p>
+</main><script type="module" src="/static/research.js?v=collection_v1"></script></body></html>

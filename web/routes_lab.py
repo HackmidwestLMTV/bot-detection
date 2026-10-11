@@ -128,7 +128,7 @@ def list_variants():
 
 @router.get("/v1/variants/active")
 def get_active_variant():
-    return {**active_variant(), "path_version": config.PATH_VERSION}
+    return {**active_variant(), "path_version": config.PATH_VERSION, "presentation_version": config.PRESENTATION_VERSION}
 
 
 @router.post("/v1/variants")
@@ -136,7 +136,10 @@ def create_variant(body: VariantIn):
     cfg = body.model_dump()
     if cfg.get("path_version", config.PATH_VERSION) != config.PATH_VERSION:
         raise HTTPException(422, "scoring proposals cannot change the configured challenge path_version")
+    if cfg.get("presentation_version", config.PRESENTATION_VERSION) != config.PRESENTATION_VERSION:
+        raise HTTPException(422, "scoring proposals cannot change the configured presentation_version")
     cfg["path_version"] = config.PATH_VERSION
+    cfg["presentation_version"] = config.PRESENTATION_VERSION
     n = db.exec("INSERT INTO variants(id, config, status) VALUES (%s, %s, 'candidate') ON CONFLICT (id) DO NOTHING",
                 cfg["id"], db.Json(cfg))
     if not n:
@@ -177,16 +180,18 @@ async def activate_variant(variant_id: str, run_id: str | None = Query(default=N
 
 @router.get("/v1/lab/human-features")
 def human_features():
-    return db.all("""SELECT id AS attempt_id, device, COALESCE(nondominant_hand, false) AS nondominant_hand, features, path_version
-                     FROM attempts WHERE cohort='human_test' AND path_version=%s ORDER BY created_at""", config.PATH_VERSION)
+    return db.all("""SELECT id AS attempt_id, device, COALESCE(nondominant_hand, false) AS nondominant_hand,
+                            features, path_version, presentation_version
+                     FROM attempts WHERE cohort='human_test' AND path_version=%s AND presentation_version=%s
+                     ORDER BY created_at""", config.PATH_VERSION, config.PRESENTATION_VERSION)
 
 
 @router.get("/v1/lab/forgeries")
 def forgeries(round_id: str | None = Query(default=None)):
-    sql = """SELECT id AS attempt_id, round_id, features, score, pass, path_version
-             FROM attempts WHERE cohort='red' AND path_version=%s
+    sql = """SELECT id AS attempt_id, round_id, features, score, pass, path_version, presentation_version
+             FROM attempts WHERE cohort='red' AND path_version=%s AND presentation_version=%s
              AND (%s::text IS NULL OR round_id=%s::text) ORDER BY created_at"""
-    return db.all(sql, config.PATH_VERSION, round_id, round_id)
+    return db.all(sql, config.PATH_VERSION, config.PRESENTATION_VERSION, round_id, round_id)
 
 
 # ---------- gate + approvals ----------
@@ -214,12 +219,17 @@ def _evaluate(conn, candidate_id: str) -> tuple[dict, str]:
         raise HTTPException(409, "no active baseline")
     if row["config"].get("path_version", config.PATH_VERSION) != config.PATH_VERSION:
         raise HTTPException(422, "candidate path_version differs from configured challenge path")
-    baseline = {**active["config"], "path_version": config.PATH_VERSION}
-    candidate = {**row["config"], "path_version": config.PATH_VERSION}
-    humans = conn.execute("SELECT id, device, features, path_version FROM attempts WHERE cohort='human_test' AND path_version=%s ORDER BY id",
-                          (config.PATH_VERSION,)).fetchall()
-    forged = conn.execute("SELECT id, round_id, features, path_version FROM attempts WHERE cohort='red' AND path_version=%s ORDER BY id",
-                          (config.PATH_VERSION,)).fetchall()
+    if row["config"].get("presentation_version", config.PRESENTATION_VERSION) != config.PRESENTATION_VERSION:
+        raise HTTPException(422, "candidate presentation_version differs from configured display")
+    context = {"path_version": config.PATH_VERSION, "presentation_version": config.PRESENTATION_VERSION}
+    baseline = {**active["config"], **context}
+    candidate = {**row["config"], **context}
+    humans = conn.execute("""SELECT id, device, features, path_version, presentation_version FROM attempts
+                              WHERE cohort='human_test' AND path_version=%s AND presentation_version=%s ORDER BY id""",
+                          (config.PATH_VERSION, config.PRESENTATION_VERSION)).fetchall()
+    forged = conn.execute("""SELECT id, round_id, features, path_version, presentation_version FROM attempts
+                              WHERE cohort='red' AND path_version=%s AND presentation_version=%s ORDER BY id""",
+                          (config.PATH_VERSION, config.PRESENTATION_VERSION)).fetchall()
     invalid_devices = [r["id"] for r in humans
                        if not isinstance(r["device"], str) or r["device"] not in {"mouse", "trackpad", "touch"}]
     if invalid_devices:

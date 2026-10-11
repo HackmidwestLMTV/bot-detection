@@ -11,13 +11,14 @@ import numpy as np
 from engine.forger import forge_trail
 from engine.path import PATH_VERSIONS
 from engine.scorer import FEATURES, features, normalize_samples, score_features, validate_variant
+from contracts.presentation import LEGACY_PRESENTATION, PRESENTATION_VERSION
 
 ROOT = Path(__file__).resolve().parents[1]
 DEVICES = ("mouse", "trackpad", "touch")
 
 
-def load_traces(folder, path_version="v1"):
-    """Read a single path cohort (None explicitly requests all for transplantation)."""
+def load_traces(folder, path_version="v1", presentation_version=PRESENTATION_VERSION):
+    """Read a path/display cohort; None explicitly requests all for transplantation."""
     if path_version is not None and path_version not in PATH_VERSIONS:
         raise ValueError("unsupported path_version")
     traces, rejected, seen = [], [], set()
@@ -29,6 +30,11 @@ def load_traces(folder, path_version="v1"):
                 raise ValueError("unsupported path_version")
             if path_version is not None and version != path_version:
                 continue
+            presentation = trace.get("presentation_version", LEGACY_PRESENTATION)
+            if presentation not in (LEGACY_PRESENTATION, PRESENTATION_VERSION):
+                raise ValueError("unsupported presentation_version")
+            if presentation_version is not None and presentation != presentation_version:
+                continue
             if (trace.get("cohort") != "human_test" or trace.get("tester", {}).get("consent") is not True
                     or trace.get("round_id") is not None or trace.get("device") not in DEVICES):
                 raise ValueError("requires consented human_test evidence with a supported device")
@@ -38,7 +44,7 @@ def load_traces(folder, path_version="v1"):
             samples = normalize_samples(trace["samples"])
             if samples[-1, 0] > 3000:
                 raise ValueError("trace exceeds challenge duration")
-            fingerprint = hashlib.sha256(json.dumps([version, seed, samples.tolist()]).encode()).hexdigest()
+            fingerprint = hashlib.sha256(json.dumps([version, presentation, seed, samples.tolist()]).encode()).hexdigest()
             if fingerprint in seen:
                 raise ValueError("duplicate recording")
             values = features(samples, seed, version)
@@ -49,13 +55,14 @@ def load_traces(folder, path_version="v1"):
     return traces, rejected
 
 
-def calibration_report(folder, baseline, *, path_version=None):
+def calibration_report(folder, baseline, *, path_version=None, presentation_version=PRESENTATION_VERSION):
     baseline = deepcopy(baseline)
     if path_version is not None:
         baseline["path_version"] = path_version
     validate_variant(baseline)
     version = baseline.get("path_version", "v1")
-    rows, rejected = load_traces(folder, version)
+    rows, rejected = load_traces(folder, version, presentation_version)
+    baseline["presentation_version"] = presentation_version
     counts = {device: sum(row["trace"]["device"] == device for row in rows) for device in DEVICES}
     reasons = []
     if len(rows) < 10:
@@ -98,19 +105,23 @@ def calibration_report(folder, baseline, *, path_version=None):
     if naive_passed:
         reasons.append(f"perfect-target baseline passes on {naive_passed} of {len(seeds)} recorded seeds")
     return {"ready_for_review": not reasons, "reasons": reasons, "recordings": len(rows), "path_version": version,
+            "presentation_version": presentation_version,
             "devices": groups, "rejected_files": rejected, "human_failures": failures,
             "naive_forgeries": {"total": len(seeds), "passed": naive_passed},
             "candidate": candidate if rows else None,
-            "note": "Only recordings matching path_version are included. In-sample team calibration only; not held-out accuracy or proof of humanity."}
+            "note": "Only recordings matching path_version and presentation_version are included. In-sample team calibration only; not held-out accuracy or proof of humanity."}
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--traces", type=Path, default=ROOT / "contracts/fixtures/human_traces")
     parser.add_argument("--variant", type=Path, default=ROOT / "contracts/fixtures/variant_v1.json")
-    parser.add_argument("--path-version", choices=PATH_VERSIONS, help="Select a separate path cohort; default is the variant's version")
+    parser.add_argument("--path-version", choices=PATH_VERSIONS, default="smooth_v2", help="Select a separate path cohort (default: smooth_v2)")
+    parser.add_argument("--presentation-version", choices=(LEGACY_PRESENTATION, PRESENTATION_VERSION),
+                        default=PRESENTATION_VERSION, help="Select a display cohort; legacy is audit-only")
     args = parser.parse_args(argv)
-    report = calibration_report(args.traces, json.loads(args.variant.read_text(encoding="utf-8")), path_version=args.path_version)
+    report = calibration_report(args.traces, json.loads(args.variant.read_text(encoding="utf-8")),
+                                path_version=args.path_version, presentation_version=args.presentation_version)
     print(json.dumps(report, indent=2, allow_nan=False))
     return 0 if report["ready_for_review"] else 2
 

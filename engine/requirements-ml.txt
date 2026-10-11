@@ -1,0 +1,5 @@
+-r requirements-core.txt
+scikit-learn>=1.6,<2
+torch>=2.6,<3
+httpx>=0.27,<1
+pytest>=8,<10

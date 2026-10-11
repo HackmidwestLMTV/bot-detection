@@ -33,7 +33,8 @@ async def execute(command, client, model_factory, budget, state, *, traces_dir, 
     before = budget.calls
     try:
         if kind == "red":
-            traces, rejected = load_traces(traces_dir) if number >= 3 else ([], [])
+            # Legacy residuals remain useful as synthetic attacks, never current human evidence.
+            traces, rejected = load_traces(traces_dir, None, None) if number >= 3 else ([], [])
             if rejected:
                 raise ValueError("resolve invalid team recordings before using transplantation")
             report = await run_red(model_factory(), client, run_id=run_id, round_number=number, traces=traces, budget=budget)

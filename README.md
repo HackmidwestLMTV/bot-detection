@@ -1,17 +1,18 @@
 # Follow It
 
-On a ticket checkout, one AI (Red) learns to fake a human hand, a second AI (Blue) tries to block it, and before any block goes live, a fixed gate shows how many real people it would lock out, and a person approves.
+Follow It replaces image puzzles with a three-second movement check. AI agents test simulated attacks and propose defense updates; measured human impact and operator approval control what goes live. See [the pitch, demo script, and cloud verification guide](reviews/product-demo.md).
 
-- **Ticket page** (`/`): follow a comet for 3 seconds. Pass and you get a single-use token to reserve a ticket. Fail or skip and your browser solves a small proof-of-work instead. Nobody is ever blocked.
+- **Ticket page** (`/`): follow a ball and ring for 3 seconds. Pass and you get a single-use token to reserve a demo ticket. Fail or skip and your browser solves a small proof-of-work instead. This fallback adds computational friction, not proof of humanity.
 - **Lab** (`/lab`): Red forges pointer trails against the live scorer. Blue proposes a stricter scoring variant. The gate replays every stored human trace and every forgery against it, and the variant goes live only after a person presses Approve.
+- **Movement research** (`/research`): create individual tester invitations and phone QR codes with the lab key, track device coverage, and collect consented sequences for offline Random Forest/CNN/LSTM comparison. Optional local shadow scoring cannot affect passes or activate a policy. See the [collection and benchmark runbook](engine/ml/README.md).
 
 The full contract between the two halves is in [contracts/CONTRACT.md](contracts/CONTRACT.md).
 
-## Akamai services used
+## Akamai deployment architecture (verify each deployed service)
 - **Linode VM** (g6-standard-2): app, agent worker and Caddy, all under Docker Compose.
 - **Managed PostgreSQL 18**: challenges, attempts (features only), tokens, variants, approvals, gate decisions, lab events.
 - **Object Storage** (`followit-trails`, us-sea-1): raw movement traces, kept only from consenting testers and only for 72 hours.
-- **Hosted inference** (`ws.akamai-workshops.com`): the model behind the Red and Blue Strands agents.
+- **Hosted inference** (`ws.akamai-workshops.com`, `hackathon-chat`): the shared endpoint for separate Red and Blue Strands agents. The underlying model is unconfirmed; checkout uses deterministic scoring without model calls.
 
 ## Architecture
 ```text
@@ -34,7 +35,7 @@ The full contract between the two halves is in [contracts/CONTRACT.md](contracts
 | `engine/` | Person 2 | `p2` |
 
 ## Env vars
-`DATABASE_URL`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_KEY`, `S3_SECRET`, `LAB_KEY`, `POW_BITS`, `DOMAIN`, `PUBLIC_URL`, `ACME_CA` (optional), `API_BASE`, `AKAMAI_BASE_URL`, `AKAMAI_API_KEY`, `MODEL_ID`. See [.env.example](.env.example).
+`DATABASE_URL`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_KEY`, `S3_SECRET`, `LAB_KEY`, `POW_BITS`, `DOMAIN`, `PUBLIC_URL`, `ACME_CA` (optional), `API_BASE`, `AKAMAI_BASE_URL`, `AKAMAI_API_KEY`, `MODEL_ID`. Optional research: `RESEARCH_RECORDINGS_DIR`, `SHADOW_MODEL_DIR`. See [.env.example](.env.example).
 
 ## Try it
 ```bash
@@ -42,7 +43,9 @@ curl -s -X POST https://$DOMAIN/v1/challenges -H 'content-type: application/json
 # {"challenge_id":"ch_…","seed":532532022,"variant_id":"v1","duration_ms":3000,"expires_in_s":120}
 curl -s https://$DOMAIN/healthz          # engine mode, active variant, human trace counts by device
 ```
-Print `https://$DOMAIN/qr` for the table. It's a QR code to tester mode (`/?tester=1`).
+Print `https://$DOMAIN/qr` for visitors: it opens ordinary checkout. Use `/qr/tester` separately for calibration helpers; it opens `/?tester=1`, requiring consent and device selection.
+
+New challenges and recordings carry `presentation_version=plain_ring_v1`. Existing database rows retain `legacy`; the lab excludes evidence from other motion/display cohorts. Each challenge snapshots its issued scoring policy, so updates affect newly issued challenges. Collect fresh recordings after the display change before claiming human pass rates.
 
 ## Deploy (Linode)
 1. Create the Managed Postgres **first**, because it takes 5–10 minutes to provision (details below). While it provisions, create the VM (Ubuntu 24.04, `g6-standard-2`) and the bucket plus a key scoped to it. The Cloud Firewall must allow TCP 22, 80 and 443.

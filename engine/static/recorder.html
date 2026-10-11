@@ -36,13 +36,13 @@
 <main>
 <span class="eyebrow">Your movement. Three seconds.</span>
 <h1>A little motion.<br>A human moment.</h1>
-<p class="intro">Keep your fingertip in the centre of the light. The wide ring stays visible around your finger; the arrow shows which way it is moving.</p>
+<p class="intro">Touch or point at the ball, then follow it for three seconds. The wide ring stays visible around your finger.</p>
 <div class="recorder">
 <div class="controls"><label>Input device <select id="device"><option value="mouse">Mouse</option><option value="trackpad">Trackpad</option><option value="touch">Touchscreen</option></select></label>
 <button id="new" disabled>New recording</button>
 </div>
-<p id="status" role="status" aria-live="polite">Loading the comet path…</p>
-<canvas id="trail" width="600" height="400" aria-label="Movement recording area: press on the comet to start, then follow it for three seconds"></canvas>
+<p id="status" role="status" aria-live="polite">Loading the ball path…</p>
+<canvas id="trail" width="600" height="400" aria-label="Touch or point at the ball, then follow it for three seconds"></canvas>
 <div class="progress" aria-hidden="true"><div id="progress"></div></div>
 <div class="guide"><span>Keep contact · follow the centre</span><span>3 seconds</span></div>
 <section id="results" hidden>
@@ -58,7 +58,7 @@
 <p class="muted">Local movement trial · provisional scoring. A pass does not prove someone is human. Nothing is saved unless you consent and choose Save recording.</p>
 </main>
 <script type="module">
-import { drawTarget } from '/dev/comet-target.js';
+import { drawTarget, targetGeometry, PRESENTATION_VERSION } from '/dev/comet-target.js?v=plain_ring_v1';
 const el = id => document.getElementById(id);
 const canvas = el('trail'), ctx = canvas.getContext('2d');
 const dpr = Math.min(window.devicePixelRatio || 1, 3);
@@ -77,10 +77,8 @@ function draw(t=0) {
   ctx.fillStyle='#10192b'; ctx.fillRect(0,0,600,400);
   ctx.fillStyle='#ffffff16';
   for(let x=20;x<600;x+=40) for(let y=20;y<400;y+=40) { ctx.beginPath(); ctx.arc(x,y,1,0,Math.PI*2); ctx.fill(); }
-  ctx.strokeStyle='#8ba4c080'; ctx.lineWidth=2; ctx.beginPath();
-  samples.forEach(([_,x,y],i) => i ? ctx.lineTo(x,y) : ctx.moveTo(x,y)); ctx.stroke();
   if (!path) return;
-  drawTarget(ctx, path(t), t > 0 ? path(Math.max(0,t-16)) : null, canvas.getBoundingClientRect().width);
+  drawTarget(ctx, path(t), canvas.getBoundingClientRect().width);
   el('progress').style.width=`${t/30}%`;
 }
 function position(event) {
@@ -94,7 +92,7 @@ async function finish() {
   active=false; samples.push([3000,...last]); const challengeId=challenge.challenge_id; challenge=null;
   message('Scoring your movement…');
   try {
-    const data=await api('/dev/attempts',{challenge_id:challengeId,samples,device,pointer_type:pointerType});
+    const data=await api('/dev/attempts',{challenge_id:challengeId,samples,device,pointer_type:pointerType,presentation_version:PRESENTATION_VERSION});
     attemptId=data.attempt_id; const result=data.result;
     el('score').textContent=`${result.pass ? 'Pass' : 'Below threshold'} · ${Math.round(result.score*100)}%`;
     el('features').replaceChildren();
@@ -118,17 +116,18 @@ function tick() {
 el('new').onclick=async () => {
   el('new').disabled=true; el('results').hidden=true; el('consent').checked=false;
   el('nondominant').checked=false; el('save').disabled=true; el('save-state').textContent=''; attemptId=null; samples=[];
-  try { challenge=await api('/dev/challenges',{}); path=makePath(challenge.seed,challenge.path_version||'v1'); draw(); message('Press on the comet to start. Follow it for three seconds; keep your finger down on touchscreens.'); }
+  try { challenge=await api('/dev/challenges',{}); if(challenge.presentation_version!==PRESENTATION_VERSION) { challenge=null; throw new Error('The recorder display changed. Reload before recording.'); } path=makePath(challenge.seed,challenge.path_version||'v1'); draw(); message('Touch or point at the ball, then follow it for three seconds. Keep your finger down on touchscreens.'); }
   catch(error) { message(error.message); el('new').disabled=false; }
 };
 canvas.onpointerdown=event => {
   if(!challenge || active || event.isPrimary===false) return;
   last=position(event); const target=path(0);
-  if(Math.hypot(last[0]-target[0],last[1]-target[1])>35) { message('Press the bright centre of the ring to begin.'); return; }
+  const startRadius=Math.max(40,targetGeometry(canvas.getBoundingClientRect().width).radius);
+  if(Math.hypot(last[0]-target[0],last[1]-target[1])>startRadius) { message('Touch or point inside the ring to begin.'); return; }
   event.preventDefault(); pointerId=event.pointerId; canvas.setPointerCapture(pointerId);
   pointerType=event.pointerType || 'mouse';
   device=pointerType==='touch' ? 'touch' : el('device').value; el('device').value=device; el('device').disabled=true;
-  started=performance.now(); samples=[[0,...last]]; active=true; message('Follow the comet…'); tick();
+  started=performance.now(); samples=[[0,...last]]; active=true; message('Follow the ball…'); tick();
 };
 canvas.onpointermove=event => {
   if(!active || event.pointerId!==pointerId) return;

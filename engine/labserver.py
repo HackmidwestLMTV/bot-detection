@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, StrictBool
 
 from engine.scorer import normalize_samples, score, score_features, validate_variant
 from engine.gate import gate
+from contracts.presentation import LEGACY_PRESENTATION, PRESENTATION_VERSION
 
 
 class ChallengeRequest(BaseModel):
@@ -69,14 +70,22 @@ def create_lab_app(*, lab_key="dev", variant=None, humans=(), forgeries=(), cloc
     validate_variant(variant)
     variant = deepcopy(variant)
     path_version = variant.get("path_version", "v1")
+    presentation_version = variant.get("presentation_version", PRESENTATION_VERSION)
+    if presentation_version != PRESENTATION_VERSION:
+        raise ValueError("unsupported lab presentation_version")
+    variant["presentation_version"] = presentation_version
     initial = deepcopy(variant)
     app = FastAPI(title="Follow It disposable lab")
-    challenges, attempts, events = {}, deepcopy([r for r in forgeries if r.get("path_version", "v1") == path_version]), []
+    def matches(row):
+        return (row.get("path_version", "v1") == path_version
+                and row.get("presentation_version", LEGACY_PRESENTATION) == presentation_version)
+
+    challenges, attempts, events = {}, deepcopy([r for r in forgeries if matches(r)]), []
     for row in attempts:
         score_features(row["features"], variant)
     variants, approvals, commands = {variant["id"]: variant}, {}, []
     all_humans = list(humans)
-    human_rows = deepcopy([r for r in all_humans if r.get("path_version", "v1") == path_version])
+    human_rows = deepcopy([r for r in all_humans if matches(r)])
     for row in human_rows:
         if row.get("device") not in ("mouse", "trackpad", "touch"):
             raise ValueError("invalid human device")
@@ -98,7 +107,7 @@ def create_lab_app(*, lab_key="dev", variant=None, humans=(), forgeries=(), cloc
         return gate(variants[candidate_id], variant, human_rows, attempts)
 
     def fingerprint(candidate_id):
-        body = [variants[candidate_id], variant, human_rows, attempts]
+        body = [path_version, presentation_version, variants[candidate_id], variant, human_rows, attempts]
         return hashlib.sha256(json.dumps(body, sort_keys=True, allow_nan=False).encode()).hexdigest()
 
     def auth(x_lab_key: str = Header(default="")):
@@ -107,8 +116,11 @@ def create_lab_app(*, lab_key="dev", variant=None, humans=(), forgeries=(), cloc
 
     @app.get("/healthz")
     def health():
+        counts = {device: sum(row["device"] == device for row in human_rows) for device in ("mouse", "trackpad", "touch")}
         return {"status": "ok", "mode": "disposable_lab", "human_records": len(human_rows),
-                "path_version": path_version, "excluded_legacy_human_traces": len(all_humans) - len(human_rows)}
+                "human_traces": {"total": len(human_rows), **counts},
+                "path_version": path_version, "presentation_version": presentation_version,
+                "excluded_legacy_human_traces": len(all_humans) - len(human_rows)}
 
     @app.get("/lab")
     def lab_page():
@@ -127,9 +139,11 @@ def create_lab_app(*, lab_key="dev", variant=None, humans=(), forgeries=(), cloc
             raise HTTPException(429, "restart the disposable lab to clear capacity")
         challenge_id = uuid4().hex
         seed = secrets.randbits(32)
-        challenges[challenge_id] = {"seed": seed, "expires": clock() + 120, "path_version": path_version}
+        challenges[challenge_id] = {"seed": seed, "expires": clock() + 120, "path_version": path_version,
+                                    "presentation_version": presentation_version, "scoring_config": deepcopy(variant)}
         return {"challenge_id": challenge_id, "seed": seed, "variant_id": variant["id"],
-                "duration_ms": 3000, "expires_in_s": 120, "path_version": path_version}
+                "duration_ms": 3000, "expires_in_s": 120, "path_version": path_version,
+                "presentation_version": presentation_version}
 
     @app.post("/v1/challenges/{challenge_id}/attempt", dependencies=[Depends(auth)])
     def attempt(challenge_id: str, body: RedAttempt):
@@ -142,14 +156,14 @@ def create_lab_app(*, lab_key="dev", variant=None, humans=(), forgeries=(), cloc
             samples = normalize_samples(body.samples)
             if samples[-1, 0] > 3000:
                 raise ValueError("samples exceed challenge duration")
-            result = score(samples, item["seed"], {**variant, "path_version": item["path_version"]})
+            result = score(samples, item["seed"], {**item["scoring_config"], "path_version": item["path_version"]})
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         del challenges[challenge_id]
         with lock:
             attempts.append({"attempt_id": "att_" + uuid4().hex, "round_id": body.round_id,
                              "features": result["features"], "score": result["score"], "pass": result["pass"],
-                             "path_version": item["path_version"]})
+                             "path_version": item["path_version"], "presentation_version": item["presentation_version"]})
         # Match the contract: attempt IDs are obtained from the forgery listing.
         return {"result": result, "token": None, "fallback": None if result["pass"] else "pow"}
 
@@ -178,6 +192,8 @@ def create_lab_app(*, lab_key="dev", variant=None, humans=(), forgeries=(), cloc
             validate_variant(body)
             if body.get("path_version", path_version) != path_version:
                 raise ValueError("scoring proposals cannot change the lab path_version")
+            if body.get("presentation_version", presentation_version) != presentation_version:
+                raise ValueError("scoring proposals cannot change the lab presentation_version")
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         with lock:
@@ -185,12 +201,12 @@ def create_lab_app(*, lab_key="dev", variant=None, humans=(), forgeries=(), cloc
                 raise HTTPException(409, "variant already exists")
             if len(variants) >= 100:
                 raise HTTPException(429, "candidate capacity reached")
-            variants[body["id"]] = deepcopy(body)
+            variants[body["id"]] = {**deepcopy(body), "presentation_version": presentation_version}
         return {"id": body["id"]}
 
     @app.get("/v1/lab/human-features", dependencies=[Depends(auth)])
     def human_features():
-        return [{key: row[key] for key in ("attempt_id", "device", "features", "nondominant_hand") if key in row}
+        return [{key: row[key] for key in ("attempt_id", "device", "features", "nondominant_hand", "path_version", "presentation_version") if key in row}
                 for row in human_rows]
 
     @app.post("/v1/lab/gate", dependencies=[Depends(auth)])
@@ -303,10 +319,12 @@ def create_lab_app(*, lab_key="dev", variant=None, humans=(), forgeries=(), cloc
 
 def local_humans():
     from engine.calibrate import ROOT, load_traces
-    rows, rejected = load_traces(os.environ.get("HUMAN_TRACES_DIR", ROOT / "contracts/fixtures/human_traces"))
+    rows, rejected = load_traces(os.environ.get("HUMAN_TRACES_DIR", ROOT / "contracts/fixtures/human_traces"), None)
     if rejected:
         raise ValueError("invalid local human evidence; run python -m engine.calibrate")
     return [{"attempt_id": row["file"], "device": row["trace"]["device"], "features": row["features"],
+             "path_version": row["trace"].get("path_version", "v1"),
+             "presentation_version": row["trace"].get("presentation_version", LEGACY_PRESENTATION),
              "nondominant_hand": row["trace"]["tester"].get("nondominant_hand", False)} for row in rows]
 
 
@@ -315,4 +333,7 @@ def local_forgeries():
     return json.loads(Path(path).read_text(encoding="utf-8"))["forgeries"] if path else []
 
 
-app = create_lab_app(lab_key=os.environ.get("LAB_KEY", "dev"), humans=local_humans(), forgeries=local_forgeries())
+_local_variant = json.loads((Path(__file__).resolve().parents[1] / "contracts/fixtures/variant_v1.json").read_text())
+_local_variant["path_version"] = os.environ.get("PATH_VERSION", "smooth_v2")
+app = create_lab_app(lab_key=os.environ.get("LAB_KEY", "dev"), variant=_local_variant,
+                     humans=local_humans(), forgeries=local_forgeries())

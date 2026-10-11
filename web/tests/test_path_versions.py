@@ -42,6 +42,7 @@ def test_challenge_pins_path_for_scoring_evidence_and_storage(client, monkeypatc
     monkeypatch.setattr(storage, "put_trail", lambda aid, trail: stored.append(trail) or "test-only")
     response = client.post(f"/v1/challenges/{challenge['challenge_id']}/attempt", json={
         "samples": samples, "device": "mouse", "cohort": "human_test", "tester": {"consent": True},
+        "presentation_version": challenge["presentation_version"],
         "path_version": next_version, "seed": 0})
     assert response.status_code == 200, response.text
     result = response.json()
@@ -58,8 +59,8 @@ def test_legacy_rows_keep_v1_and_are_excluded_from_smooth_evidence(client, monke
         for aid, cohort in [(legacy_human, "human_test"), (legacy_red, "red")]:
             # Column defaults model pre-versioning records; no backfill to smooth_v2.
             db.exec("INSERT INTO attempts(id, cohort, device, features) VALUES (%s, %s, 'mouse', %s)", aid, cohort, db.Json(FEATS))
-        db.exec("INSERT INTO attempts(id, cohort, device, features, path_version) VALUES (%s, 'human_test', 'touch', %s, 'smooth_v2')",
-                current_human, db.Json(FEATS))
+        db.exec("INSERT INTO attempts(id, cohort, device, features, path_version, presentation_version) VALUES (%s, 'human_test', 'touch', %s, 'smooth_v2', %s)",
+                current_human, db.Json(FEATS), config.PRESENTATION_VERSION)
         assert db.one("SELECT path_version FROM attempts WHERE id=%s", legacy_human)["path_version"] == "v1"
         humans = client.get("/v1/lab/human-features", headers=LAB).json()
         assert legacy_human not in [row["attempt_id"] for row in humans]

@@ -13,6 +13,25 @@ CREATE INDEX IF NOT EXISTS attempts_cohort ON attempts (cohort, round_id);
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS path_version text NOT NULL DEFAULT 'v1';
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS path_version text NOT NULL DEFAULT 'v1';
 CREATE INDEX IF NOT EXISTS attempts_path_cohort ON attempts (path_version, cohort);
+-- Historical rows keep their original presentation; new writes set it explicitly.
+ALTER TABLE challenges ADD COLUMN IF NOT EXISTS presentation_version text NOT NULL DEFAULT 'legacy';
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS presentation_version text NOT NULL DEFAULT 'legacy';
+-- Snapshot the issued rule so retiring/resetting a variant cannot change an open check.
+ALTER TABLE challenges ADD COLUMN IF NOT EXISTS scoring_config jsonb;
+CREATE INDEX IF NOT EXISTS attempts_presentation_path_cohort
+  ON attempts (presentation_version, path_version, cohort);
+ALTER TABLE challenges ADD COLUMN IF NOT EXISTS research_enrollment text;
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS shadow_result jsonb;
+
+CREATE TABLE IF NOT EXISTS research_enrollments (
+  id text PRIMARY KEY, code_hash text NOT NULL UNIQUE, participant_id text NOT NULL,
+  session_id text, remaining int NOT NULL DEFAULT 30,
+  expires_at timestamptz NOT NULL);
+CREATE TABLE IF NOT EXISTS research_recordings (
+  id text PRIMARY KEY, enrollment_id text NOT NULL, device text NOT NULL,
+  path_version text NOT NULL, presentation_version text NOT NULL,
+  expires_at timestamptz NOT NULL, storage_key text NOT NULL);
+CREATE INDEX IF NOT EXISTS research_recordings_expiry ON research_recordings(expires_at);
 
 CREATE TABLE IF NOT EXISTS tokens (
   id text PRIMARY KEY, session_id text NOT NULL, action text NOT NULL,
@@ -29,6 +48,8 @@ CREATE TABLE IF NOT EXISTS reservations (
 CREATE TABLE IF NOT EXISTS variants (
   id text PRIMARY KEY, config jsonb NOT NULL, status text NOT NULL,  -- active | candidate | retired
   created_at timestamptz NOT NULL DEFAULT now());
+UPDATE challenges SET scoring_config = variants.config
+  FROM variants WHERE challenges.variant_id = variants.id AND challenges.scoring_config IS NULL;
 
 CREATE TABLE IF NOT EXISTS approvals (
   id text PRIMARY KEY, interrupt_id text, variant_id text NOT NULL, gate jsonb,

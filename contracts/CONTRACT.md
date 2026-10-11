@@ -64,6 +64,14 @@ Check to within 0.01 px.
 
 ### Data shapes (JSON)
 
+October 10 plain-ring demo update: each challenge returns `path_version` and
+`presentation_version="plain_ring_v1"`. The server stores both on attempts and
+consented recordings, and snapshots the issued scoring policy on the challenge.
+Retiring/resetting a variant does not change an already issued check. Missing
+historical presentation metadata means `legacy`; current gates and lab listings
+filter both motion and display. Approval fingerprints include both identities.
+The visitor QR is `/qr`; consent-based calibration uses `/qr/tester`.
+
 **Trail** (browser → server, and Red → server):
 ```json
 {"samples": [[0, 412.0, 233.5], [16, 414.2, 236.0]],
@@ -71,11 +79,15 @@ Check to within 0.01 px.
  "pointer_type": "mouse | pen | touch",
  "cohort": "organic | human_test | red",
  "tester": {"consent": true, "nondominant_hand": false},
- "round_id": null}
+ "round_id": null,
+ "presentation_version": "plain_ring_v1"}
 ```
 - `samples` are `[t_ms, x, y]`. `t_ms` counts from the moment the comet starts moving. `x` and `y` are logical canvas px.
 - `tester` appears only in tester mode.
 - `round_id` is set only for red attempts.
+- Tester submissions must confirm the issued `presentation_version`; missing or
+  mismatched display metadata returns 409 without recording current human evidence.
+  This prevents accidental mixing from cached tester pages, not forged telemetry.
 
 **ScoreResult** (`engine.score()` returns it; the attempt endpoint returns it):
 ```json
@@ -124,7 +136,7 @@ from engine.gate import gate             # gate(candidate:dict, baseline:dict,
 **Public**
 | Method | Path | Body → Response |
 |---|---|---|
-| POST | `/v1/challenges` | `{session_id}` → `{challenge_id, seed, variant_id, duration_ms: 3000, expires_in_s: 120}` |
+| POST | `/v1/challenges` | `{session_id}` → `{challenge_id, seed, variant_id, duration_ms: 3000, expires_in_s: 120, path_version, presentation_version}` |
 | POST | `/v1/challenges/{id}/attempt` | Trail → `{result: ScoreResult, token: "tok_…" \| null, fallback: "pow" \| null}`. A red attempt needs `X-Lab-Key` and never gets a token. |
 | POST | `/v1/pow` | `{session_id}` → `{pow_id, nonce, bits, expires_in_s: 120}` |
 | POST | `/v1/pow/{id}/solve` | `{counter}` → `{token}` or 400 |
@@ -133,8 +145,8 @@ from engine.gate import gate             # gate(candidate:dict, baseline:dict,
 **Lab** (all need `X-Lab-Key`)
 | Method | Path | Body → Response |
 |---|---|---|
-| GET | `/v1/lab/human-features` | → `[{"attempt_id", "device", "nondominant_hand", "features"}]` (cohort `human_test` only; **no raw trails**) |
-| GET | `/v1/lab/forgeries?round_id=` | → `[{"attempt_id", "round_id", "features", "score", "pass"}]` (all rounds if no `round_id`) |
+| GET | `/v1/lab/human-features` | → `[{"attempt_id", "device", "nondominant_hand", "features", "path_version", "presentation_version"}]` (current motion/display `human_test` cohort only; **no raw trails**) |
+| GET | `/v1/lab/forgeries?round_id=` | → `[{"attempt_id", "round_id", "features", "score", "pass", "path_version", "presentation_version"}]` (current motion/display; all rounds if no `round_id`) |
 | GET | `/v1/variants` / `/v1/variants/active` | → `[Variant]` / `Variant` |
 | POST | `/v1/variants` | Variant → `{id}`, stored with status `candidate` |
 | POST | `/v1/lab/gate` | `{candidate_id}` → GateResult (baseline = active variant; stored in `gate_decisions`) |

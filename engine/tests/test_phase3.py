@@ -23,6 +23,7 @@ def variant():
 def trace(seed=1, device="mouse"):
     # Synthetic fixtures are written only under pytest tmp_path, never human_traces.
     return {"seed": seed, "samples": forge_trail(seed, lag_ms=200, noise_px=2, submove_hz=3),
+            "presentation_version": "plain_ring_v1",
             "device": device, "pointer_type": "touch" if device == "touch" else "mouse",
             "cohort": "human_test", "round_id": None, "tester": {"consent": True}}
 

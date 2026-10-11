@@ -1,0 +1,9 @@
+# Existing VM disk only. Model artifacts remain optional and cannot activate policy.
+services:
+  app:
+    environment:
+      RESEARCH_RECORDINGS_DIR: /var/lib/followit/research
+      SHADOW_MODEL_DIR: ${SHADOW_MODEL_DIR:-}
+    volumes:
+      - /root/followit/research/recordings:/var/lib/followit/research
+      - /root/followit/research/models:/var/lib/followit/models:ro
