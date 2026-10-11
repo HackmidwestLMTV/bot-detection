@@ -419,12 +419,21 @@ function spanOf(points) {
 function assertLogicalPx(st, run) {
   assert(st.minX >= 0 && st.maxX <= W, `x out of logical range [0,${W}]: [${st.minX.toFixed(1)}, ${st.maxX.toFixed(1)}]`);
   assert(st.minY >= 0 && st.maxY <= H, `y out of logical range [0,${H}]: [${st.minY.toFixed(1)}, ${st.maxY.toFixed(1)}]`);
-  // A CSS-px leak squashes the trail by rect.width/600 (0.52x on a phone). The recorded
-  // trail must span as much of the canvas as the pointer actually covered.
+  // A CSS-px leak squashes the trail by rect.width/600 (0.52x on a phone). Two guards,
+  // and the first is the real one:
+  //
+  //  1. st.meanErr -- per-sample distance from where the pointer was actually driven,
+  //     matched on timestamp. A scale leak makes this hundreds of px; it reads ~0.1 px.
+  //     Asserted by the caller.
+  //  2. The span ratio below. This one only bounds a GROSS squash, because synthesized
+  //     pointer events are coalesced and occasionally dropped when the main thread is
+  //     busy drawing, which clips the extremes of the sweep. A 0.9 floor made the check
+  //     flake at 79-84% on main and on PR #5 alike -- a harness artifact, not a app
+  //     regression. Keep it loose; guard #1 is what actually detects a leak.
   const [sx, sy] = spanOf(run.commanded);
   const gx = (st.maxX - st.minX) / sx, gy = (st.maxY - st.minY) / sy;
-  assert(gx > 0.9 && gx < 1.1, `x span is ${(gx * 100).toFixed(0)}% of what the pointer covered - samples look scaled, not logical`);
-  assert(gy > 0.9 && gy < 1.1, `y span is ${(gy * 100).toFixed(0)}% of what the pointer covered - samples look scaled, not logical`);
+  assert(gx > 0.6 && gx < 1.1, `x span is ${(gx * 100).toFixed(0)}% of what the pointer covered - samples look scaled, not logical`);
+  assert(gy > 0.6 && gy < 1.1, `y span is ${(gy * 100).toFixed(0)}% of what the pointer covered - samples look scaled, not logical`);
 }
 
 // ---------------------------------------------------------------- the checks
