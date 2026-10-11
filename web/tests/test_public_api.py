@@ -154,8 +154,10 @@ def test_human_test_requires_a_real_device(client):
     cid = challenge(client, sid())
     t = trail(cohort="human_test", tester={"consent": True})
     del t["device"]
-    assert client.post(f"/v1/challenges/{cid}/attempt", json=t).status_code == 422
-    assert db.one("SELECT 1 FROM attempts WHERE cohort='human_test' AND device IS NULL") is None
+    r = client.post(f"/v1/challenges/{cid}/attempt", json=t)
+    assert r.status_code == 422
+    # No attempt row was written for any of the refused requests.
+    assert db.one("SELECT 1 FROM attempts WHERE challenge_id=%s", cid) is None
 
 
 def test_short_trail_422(client):

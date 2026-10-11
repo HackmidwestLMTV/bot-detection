@@ -187,3 +187,59 @@ Short, because it's 9 PM and neither of us should be reading process docs.
 
 Reply on PR #2 or in `tasks/`. The only thing I actually need from you is a yes/no on the gate
 rule (#3) and a steer on the threshold (#4) — #1 is yours to fix, #2 is already handled.
+
+---
+
+# Addendum — after your `02d9a7e` push to `p1-platform`
+
+You pushed into `web/` while I was writing the above. Merged it; three conflicts
+(`deploy.sh`, `routes_lab.py`, `test_lab_api.py`), all resolved **in your favour**, because
+in each case your version was better than mine:
+
+### Your `deploy.sh` supersedes my fix
+Release snapshots under `~/.local/share/followit/releases`, `set -euo pipefail`, `umask 077`,
+build-before-replace so a failed build leaves containers intact, `--wait --wait-timeout 120`,
+`worker --check-api`, and the operator's branch/uncommitted work left alone. And
+`ENGINE_REF` already defaults to `origin/p2`, which fixes blocker #2 more cleanly than my
+three-candidate resolver. **Took yours wholesale; deleted mine.**
+
+### Your `_evaluate()` supersedes my `ValueError` catch
+You already catch `(ValueError, TypeError, KeyError) -> 422`, and you put it inside
+`_evaluate()`, which **both** gate and activate call — so it covers the activation path my
+version missed. Took yours; dropped my catch.
+
+What survives from my side is the root-cause half you didn't touch: `routes_public.py` now
+refuses to *create* a bad `human_test` row (422), so the gate never sees one. The two fixes
+are complementary — yours makes it survivable, mine makes it impossible.
+
+### Your approval hardening closes your own lesson
+`evidence_fingerprint` + `consumed_at` + `LOCK TABLE ... SHARE ROW EXCLUSIVE` + re-evaluating
+the gate *at activation time* and refusing if the evidence or baseline moved. That is a
+materially stronger guarantee than what I shipped — my version checked that an approval
+existed, yours checks that the approval still *means* the same thing. It directly closes your
+"client approval checks do not replace atomic server enforcement" lesson, from the server
+side. Retract what I said above about being able to close that one: you closed it properly,
+I hadn't.
+
+### Your 503-on-stubs is the right call, with an operational consequence
+`_evaluate()` returns `503 "real engine required"` when `USING_STUBS`. Correct — the stub
+gate returns a *fixture*, and serving that as real evidence would be a lie, in the one place
+where lying matters most. I've adopted your `real_gate` fixture for my new test rather than
+asserting around it.
+
+The consequence to plan for: **the entire gate → approval → activate path is dead on the
+deployed site until `deploy.sh engine` runs.** Before then `/lab` can stream events and run
+Red, but Approve cannot work. That's correct behaviour, not a bug — just don't let anyone
+demo `/lab` on a stub deploy and conclude it's broken.
+
+### Combined state
+
+```
+stubs:       80 passed, 23 skipped
+real engine: 101 passed,  2 skipped     # only 2 skips, so gate/approval/activate really ran
+```
+
+**Still outstanding and still only yours to fix: blocker #1.** `from openai import
+AsyncOpenAI` at `engine/tests/test_blue_worker.py:8` is unguarded on `origin/p2` as of
+`2446359`, so a full-suite run still collects zero tests. Everything else in this review is
+either resolved or waiting on a decision from you (#3, #4).

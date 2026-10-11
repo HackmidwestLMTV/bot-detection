@@ -140,7 +140,7 @@ def test_post_variant_and_conflict(client):
     assert client.post("/v1/variants", headers=LAB, json=bad).status_code == 422
 
 
-def test_gate_bad_evidence_is_422_not_500(client):
+def test_gate_bad_evidence_is_422_not_500(client, real_gate):
     """The real engine.gate() raises on a human row with a bad device. The dashboard must
     see a 422, never a 500 -- and /v1/lab/reset keeps human traces, so a bad row would
     otherwise break the gate permanently. routes_public.py now refuses to create one."""
