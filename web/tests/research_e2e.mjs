@@ -1,6 +1,6 @@
 // Disposable localhost only. This is automated fixture input, never human evidence.
 import assert from 'node:assert/strict';
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { Browser, sleep } from './browser_e2e.mjs';
 
 const base = process.argv[2] || 'http://127.0.0.1:8813';
@@ -49,6 +49,7 @@ try {
   assert.deepEqual(errors, []);
   await page.eval('document.getElementById("tester").scrollIntoView({block:"start"})');
   const screenshot = await page.c.send('Page.captureScreenshot', { format: 'png' });
+  mkdirSync('.ml-runs', { recursive: true });   // gitignored, so absent in a fresh clone
   writeFileSync('.ml-runs/research-tester-phone.png', Buffer.from(screenshot.data, 'base64'));
   console.log('PASS enrolled browser collection: consent, native events, session binding, storage outcome, 390px layout');
 } finally {

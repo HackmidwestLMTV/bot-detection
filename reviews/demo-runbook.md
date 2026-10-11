@@ -37,7 +37,9 @@ In order. Don't debug live — fall back, then debug after you're off stage.
    it to the audience, and the Run Red / Run Blue / Reset buttons are disabled (this is a
    recording, not a live run; nothing you click can break it). Narrate it as "this is the
    actual run we recorded overnight" — that's true, and it's the honest framing, not a trick.
-   If `backup_run.jsonl` doesn't exist yet, record one now (see §5 below) before you need it.
+   `recordings/rehearsal-synthetic-humans.jsonl` is a COMPLETE cycle you can replay today,
+   but its gate numbers rest on SYNTHETIC human traces -- say that out loud, or better, record
+   a real one first (see §5). If no recording exists at all, record one now before you need it.
 3. **If /lab itself won't load at all**, fall back to the ticket page only (`https://$DOMAIN/`)
    and narrate the Red/Blue/gate concept verbally using the gate numbers from your last
    successful run. A half demo beats a frozen screen.
