@@ -1,4 +1,4 @@
-# Follow It
+![Follow It — Behavioral bot detection. Evidence-led improvement.](assets/follow-it-header.svg)
 
 **Behavioral bot detection with agents that test attacks, propose improvements,
 and show the human impact before anything goes live.**
