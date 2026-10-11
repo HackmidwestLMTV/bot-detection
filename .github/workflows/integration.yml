@@ -1,0 +1,132 @@
+name: Integrated platform and engine
+
+on:
+  pull_request:
+    branches: [main, p2, p1-platform]
+  push:
+    branches: [main, p2, p1-platform]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: followit_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d followit_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:ci-only-password@127.0.0.1:5432/followit_ci
+      LAB_KEY: ci-only-lab-key
+      POW_BITS: "8"
+      # Tests use provider doubles. These settings must never target a cloud model.
+      AKAMAI_BASE_URL: http://127.0.0.1:9/v1
+      AKAMAI_API_KEY: ""
+      MODEL_ID: ci-model
+      S3_ENDPOINT: ""
+      S3_KEY: ""
+      S3_SECRET: ""
+      AWS_EC2_METADATA_DISABLED: "true"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Require the integrated source tree
+        run: |
+          # Validate this commit, never fetch a moving branch to mask missing code.
+          for file in web/app.py web/requirements.txt engine/scorer.py engine/requirements-dev.txt engine/Dockerfile; do
+            if [ ! -f "$file" ]; then
+              echo "::error::Missing $file. Merge the reviewed platform and engine before running integration CI."
+              exit 1
+            fi
+          done
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install -r web/requirements.txt -r engine/requirements-dev.txt
+          python -m pip check
+
+      - name: Require real engine and reachable disposable PostgreSQL
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+          import strands
+          from web.engine_adapter import USING_STUBS
+          assert not USING_STUBS, "Integration tests must use the real engine"
+          with psycopg.connect(os.environ["DATABASE_URL"], connect_timeout=5) as conn:
+              version = int(conn.execute("SHOW server_version_num").fetchone()[0])
+              assert 180000 <= version < 190000, version
+          PY
+
+      - name: Test contracts, engine, and database API
+        run: python -m pytest contracts engine/tests web/tests -q -ra --junitxml=/tmp/followit-tests.xml
+
+      - name: Reject silently skipped integration coverage
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("/tmp/followit-tests.xml").getroot()
+          skipped = root.findall(".//testcase/skipped")
+          # The local concurrency test already exercises real sockets and PostgreSQL.
+          # Only its optional external-site twin and obsolete stub example may skip.
+          allowed = ("relies on the stub scorer", "set FOLLOWIT_LIVE_URL to run against a live site")
+          unexpected = [s.attrib.get("message", "") for s in skipped
+                        if not any(reason in s.attrib.get("message", "") for reason in allowed)]
+          assert not unexpected, f"Unexpected skipped test coverage: {unexpected}"
+          PY
+
+      - name: Test browser controllers
+        run: node --test web/tests/*.test.*
+
+      - name: Validate Compose with generated local test settings
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          # Deliberately generate this file; never load credentials from repository secrets.
+          Path(".env").write_text(
+              "DATABASE_URL=postgresql://postgres:ci-only-password@db:5432/followit_ci\n"
+              "LAB_KEY=ci-only-lab-key\nDOMAIN=localhost\nPUBLIC_URL=http://localhost\n"
+              "API_BASE=http://app:8000\nAKAMAI_BASE_URL=http://127.0.0.1:9/v1\n"
+              "AKAMAI_API_KEY=\nMODEL_ID=ci-model\nPOW_BITS=8\n"
+              "S3_ENDPOINT=\nS3_BUCKET=followit-ci\nS3_KEY=\nS3_SECRET=\n"
+          )
+          PY
+          docker compose --profile engine config --quiet
+          docker compose -f compose.yaml -f engine/compose.worker.yaml --profile engine config --quiet
+
+      - name: Build application and worker images
+        run: |
+          docker build --tag followit-app:ci .
+          docker build --file engine/Dockerfile --tag followit-worker:ci .
+
+      - name: Verify packaged imports without cloud calls
+        run: |
+          docker run --rm followit-app:ci python -c 'from web.engine_adapter import USING_STUBS; from web.app import app; assert not USING_STUBS'
+          docker run --rm followit-worker:ci python -c 'import engine.worker; from engine.path import make_path; assert len(make_path(42)(1000)) == 2'
+
+      - name: Remove generated test settings
+        if: always()
+        run: rm -f .env

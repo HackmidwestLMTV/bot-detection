@@ -116,3 +116,28 @@
   committed history is unchanged; all new code also awaits commit approval.
 - Do not replace real evidence with synthetic recordings or approve real variants
   automatically. Approval tests use disposable local state.
+
+# Cross-team completion goal
+
+- [x] Locate teammate PR #1 and inspect current p1-platform and p2 heads.
+- [x] Reproduce the stuck proof-of-work worker and submit actionable review feedback.
+- [x] Create engine PR #2 and request teammate review.
+- [ ] Resolve platform review blockers and obtain teammate agreement before merge.
+- [ ] Build and visually verify a shared ticket/lab design system for Hack Midwest.
+- [ ] Validate integrated engine, browser flows, and database-backed API behavior.
+- [ ] Validate Akamai deployment with a real endpoint; collect missing touch calibration.
+- [ ] Recheck both PR discussions, address feedback, and merge agreed changes.
+
+User authorized GitHub review discussion, PR creation, and merges after agreement.
+Platform fixes requested from teammate; visual changes will use an isolated branch.
+
+## Integrated review progress
+
+- Teammate PR #1 reviewed, directly fixed with three agents, verified and merged as b6d572c.
+- Shared visual system rendered on desktop and 390 px phone layouts; real browser
+  skip -> PoW -> reservation -> reused-token rejection verified against PostgreSQL18.
+- Combined suite: 172 Python passed, 2 expected skips; 12 frontend tests passed.
+- Engine PR #2 opened, teammate review requested, no response at last check.
+- Merged main into p2 with both .gitignore entries retained.
+- User requested an Akamai VM. Cloud Manager requires sign-in; quoted shared 4GB
+  VM budget is pending approval. No cloud resources created yet.

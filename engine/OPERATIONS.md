@@ -74,11 +74,11 @@ builds a typed report from observed proposal/activation counts and the candidate
 stated rationale. This avoids losing a completed change to a model-summary timeout.
 Other round summaries still use validated Strands structured output.
 
-The disposable lab also enforces an approving gate and evidence-bound, single-use
-approval at activation. Person 1's current server checks for an approved approval,
-but does not atomically bind it to current gate evidence. The worker enforces those
-checks on its path; Person 1 still needs server-side enforcement for direct API
-callers and the race between final client verification and server activation.
+The disposable lab and integrated PostgreSQL platform both enforce an approving
+gate and evidence-bound, single-use approval at activation. The platform locks
+evidence writes during verification and activation, closing the race between a
+client check and the server change. Legacy approvals without a fingerprint fail
+closed. This protection was added in platform PR #1 before its merge.
 
 ## Budgets, failures, and restart behavior
 
@@ -99,37 +99,34 @@ callers and the race between final client verification and server activation.
 
 ## Person 1 integration and deployment
 
-The inspected `origin/p1-platform` at `180122a` has the required routes and imports
-the real engine. Check another checkout without changing its DB:
+Platform PR #1 is merged; `p2` includes that platform for integrated review in PR #2.
+Check another checkout without changing its DB:
 
 ```powershell
 .\.venv\Scripts\python.exe -m engine.check_platform PATH_TO_PLATFORM_CHECKOUT
 ```
 
-This checks route presence and adapter behavior, not database transactions or a
-running site. This workstation has no Docker/Postgres runtime available, so the
-full platform database suite and container build have not been run here.
+This command checks route presence and adapter behavior. The full integrated
+suite has also run against a disposable local PostgreSQL 18 database. Docker
+builds and the live Akamai deployment remain separate verification steps.
 
-After the reviewed code is committed and pushed to `p2`, Person 1 can run the
-engine-owned helper from their prepared VM checkout:
+Use the canonical deployment script from a prepared VM checkout:
 
 ```bash
-bash engine/deploy-worker.sh
+bash deploy.sh engine
 ```
 
-For the first integration, get `engine/` into that checkout with
-`git archive origin/p2 engine | tar -x` after fetching. The helper uses `origin/p2`,
-copies only `engine/`, builds the app and dedicated worker image, and checks API
-readiness. It does not provision a VM or change shared contracts. Review local
-engine changes first, since extraction overwrites matching files.
+The script builds an isolated release snapshot using platform `p1-platform` and
+engine `p2`, preserving the operator's checkout. After PR #2 merges, use
+`BRANCH=main bash deploy.sh engine`. It builds the app and dedicated worker image,
+waits for app health, and checks the authenticated API. It does not provision a VM.
 
 The Compose override selects `engine/Dockerfile`, persists worker state, and opts
 in specifically to `http://app:8000`. Other remote HTTP origins remain rejected;
 use HTTPS outside the Docker service network. The dedicated worker build excludes
 `.env`, local runtime state, and human recordings. Mount approved team recordings
 read-only on the VM if transplantation is needed; do not bake them into the image.
-Person 1's original `deploy.sh` still uses `p2-engine`; use this helper or update
-that reference to `p2` before integration.
+The root Compose definition now includes these worker settings directly.
 
 ## Verification and remaining evidence
 
@@ -138,9 +135,11 @@ residual transplantation, real SDK tool loops, budget enforcement, gate regressi
 approval/denial/timeout/stale evidence, report integrity, and persistent command
 dispatch. Scripted SDK fixtures never go into `human_traces/`.
 
-Final local verification: 79 engine/worker tests and three Person 1 adapter tests
-passed; the dependency consistency check found no conflicts. Container builds
-and database-backed platform integration still require the target environment.
+Integrated local verification: 172 Python tests passed with two expected skips,
+and 12 frontend tests passed. The browser completed skip, proof of work, reservation,
+and single-use token rejection. Desktop and 390 px layouts were inspected. The
+dependency consistency check found no conflicts. Container and live cloud checks
+remain outstanding until their respective environments are available.
 
 Live Akamai Red completed seven attacks with four passes against provisional v1.
 Live Blue proposed one candidate reducing accepted forgeries from 9/16 to 6/16;
