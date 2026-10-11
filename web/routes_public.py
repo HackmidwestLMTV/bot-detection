@@ -13,6 +13,9 @@ router = APIRouter()
 
 MAX_SAMPLES = 5000
 COHORTS = {"organic", "human_test", "red"}
+# engine.gate() raises on any human_test row whose device isn't one of these, and
+# /v1/lab/reset keeps human traces, so one bad row would break the gate for good.
+DEVICES = {"mouse", "trackpad", "touch"}
 
 
 def _session(body: dict) -> str:
@@ -57,6 +60,8 @@ def attempt(cid: str, trail: dict, x_lab_key: str | None = Header(default=None))
     red = cohort == "red"
     if red and not is_lab(x_lab_key):
         raise HTTPException(403, "lab key required for red attempts")
+    if cohort == "human_test" and trail.get("device") not in DEVICES:
+        raise HTTPException(422, "human_test requires device mouse, trackpad or touch")
     samples = _samples(trail)
     tester = trail.get("tester") if isinstance(trail.get("tester"), dict) else {}
 

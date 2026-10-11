@@ -102,7 +102,7 @@ Show it at `/lab?replay=1`, which displays the REPLAY banner. The Approve button
 
 ## Known limits
 - Rate limits and the event stream live in memory, so the app runs as one uvicorn worker on one VM.
-- The client IP comes from the first `X-Forwarded-For` hop set by Caddy. Port 8000 is bound to VM localhost; public requests must pass through Caddy.
+- The client IP is the last `X-Forwarded-For` hop, and only when the socket peer is Caddy itself — taking the first hop would let a client pick its own rate-limit identity. Port 8000 is bound to VM localhost; public requests must pass through Caddy.
 - The proof-of-work uses `crypto.subtle`, which only exists on HTTPS or localhost. Phones need the HTTPS URL.
 - The scorer's feature bands start from motor-control literature and need recalibrating from the collected human traces. The gate is only as good as that sample (count by device in `/healthz`).
 - "Non-dominant hand" stands in for less precise movement. It is not a model of disability, and the gate's device groups are coarse.
