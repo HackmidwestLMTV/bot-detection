@@ -5,6 +5,10 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+
+for dependency in ("openai", "strands", "dotenv"):
+    pytest.importorskip(dependency, reason="install engine/requirements-agents.txt for agent tests")
+
 from openai import AsyncOpenAI
 
 from engine.agents.blue import BlueHooks, human_stats, run_blue

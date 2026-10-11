@@ -143,3 +143,21 @@ Platform fixes requested from teammate; visual changes will use an isolated bran
   role and public endpoint are confirmed; no cloud resources have been created.
 - CI exposed an adapter test tied to an unfetched remote branch. It now tests the
   checked-out adapter; the focused test passes. Full CI and image builds pending.
+
+## Reciprocal review follow-up
+
+- [x] Read teammate feedback and integrate their missing-device fix.
+- [x] Fix optional SDK test collection; clean core-only environment: 53 passed,
+  six expected agent skips. Full SDK subset: 32 passed, no skips.
+- [x] Reject malformed device/cohort JSON before recording or consuming attempts.
+- [x] Diagnose retained invalid human evidence without deleting it.
+- [x] Use trusted ASGI client addresses for rate limits and configure Caddy/Uvicorn.
+- [x] Deploy a complete pinned integrated revision, preserving p2 platform fixes.
+- [x] Keep strict gate and provisional threshold; explain the zero-forgery no-change outcome.
+- [x] Combined follow-up suite: 191 passed, two expected skips.
+- [ ] Verify follow-up Docker/Caddy CI and obtain teammate final review.
+- [ ] Validate the team's existing Akamai endpoint and actual phone input when available.
+
+Previous revision 731c36a passed GitHub CI including both Docker image builds and
+packaged real-engine imports. The prior planning restrictions above are historical:
+the user later authorized committing everything and directly fixing cross-team code.

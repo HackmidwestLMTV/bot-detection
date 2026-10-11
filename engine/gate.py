@@ -28,7 +28,10 @@ def gate(candidate: dict, baseline: dict, humans: list, forgeries: list):
         for name, variant in (("candidate", candidate), ("baseline", baseline)):
             passed[name] += int(score_features(row["features"], variant)["pass"])
     if forgeries and passed["candidate"] >= passed["baseline"]:
-        reasons.append(f"forgeries passed did not decrease ({passed['candidate']} vs baseline {passed['baseline']})")
+        if passed["baseline"] == passed["candidate"] == 0:
+            reasons.append("baseline already blocks all stored forgeries; keep the active variant until new evidence demonstrates improvement")
+        else:
+            reasons.append(f"forgeries passed did not decrease ({passed['candidate']} vs baseline {passed['baseline']})")
     return {"candidate": candidate["id"], "baseline": baseline["id"],
             "verdict": "reject" if reasons else "approve_for_review", "humans_rejected": groups,
             "forgeries_passed": passed, "reasons": reasons}

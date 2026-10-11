@@ -116,6 +116,7 @@ jobs:
           PY
           docker compose --profile engine config --quiet
           docker compose -f compose.yaml -f engine/compose.worker.yaml --profile engine config --quiet
+          docker run --rm -e DOMAIN=localhost -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
       - name: Build application and worker images
         run: |

@@ -17,12 +17,11 @@ _last_sweep = 0.0
 
 
 def client_ip(request: Request) -> str:
-    """First hop of X-Forwarded-For (Caddy sets it), else the socket peer."""
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        first = xff.split(",")[0].strip()
-        if first:
-            return first
+    """Use the ASGI peer resolved by Uvicorn's configured trusted proxy middleware.
+
+    Reading raw forwarding headers here lets an untrusted client change its rate
+    limit bucket. Only the server's explicit proxy trust policy may replace peer IP.
+    """
     return request.client.host if request.client else "unknown"
 
 

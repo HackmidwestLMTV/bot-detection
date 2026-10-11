@@ -194,3 +194,18 @@ def test_platform_adapter_imports_real_engine(variant):
     assert namespace["score"] is score
     assert namespace["gate"] is gate
     assert "stub" not in namespace["score"](forge_trail(42), 42, variant)
+
+
+def test_gate_keeps_baseline_when_all_stored_forgeries_are_blocked(variant):
+    baseline = copy.deepcopy(variant)
+    baseline["enabled"] = ["lag_ms"]
+    baseline["features"]["lag_ms"] = [100, 300]
+    candidate = copy.deepcopy(baseline)
+    candidate["id"] = "no_improvement"
+    humans = [{"device": "mouse", "features": feature_values(200)}]
+    forgeries = [{"features": feature_values(0)}]
+    result = gate(candidate, baseline, humans, forgeries)
+    assert result["verdict"] == "reject"
+    assert result["forgeries_passed"] == {"candidate": 0, "baseline": 0, "total": 1}
+    assert "baseline already blocks all stored forgeries" in result["reasons"][0]
+    assert "keep the active variant" in result["reasons"][0]

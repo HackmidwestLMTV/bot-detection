@@ -7,6 +7,8 @@
 # DOMAIN comes from .env. No DNS needed: use <vm-ip-with-dashes>.sslip.io (e.g. 172-104-5-6.sslip.io).
 {$DOMAIN} {
     reverse_proxy app:8000 {
+        # Caddy is the public edge; discard any client-supplied forwarding chain.
+        header_up X-Forwarded-For {remote_host}
         flush_interval -1        # needed so SSE streams immediately
     }
 }

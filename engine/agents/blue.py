@@ -176,6 +176,8 @@ async def run_blue(model, client, *, run_id, round_number=1, budget=None, approv
                   system_prompt="You are Blue in our own behavioral scoring lab. Read forgery and per-device human summaries. "
                   "Propose at most three variants, evaluate each with run_gate, and request activate_variant only if the gate "
                   "returns approve_for_review. Never seek activation after rejection. You cannot approve your own changes. "
+                  "If the baseline already blocks all stored forgeries, retaining it is a successful no-change outcome; "
+                  "explain that new evidence is needed to demonstrate improvement. "
                   "Consider enabling power_law_beta only when the observed evidence supports it. Do not force a win or invent "
                   "evidence. Stop after activation, denial, or no useful candidate, and return a RoundReport. "
                   "Report attempts as candidates proposed and passed as candidates actually activated. "

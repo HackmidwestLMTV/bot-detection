@@ -140,7 +140,9 @@ def test_red_hooks_enforce_tool_budgets_and_round_unlock():
 
 @pytest.mark.parametrize("round_number", [1, 3])
 def test_real_sdk_red_round_uses_http_and_corrects_fabricated_report(round_number):
+    pytest.importorskip("openai")
     pytest.importorskip("strands")
+    pytest.importorskip("dotenv")
     from openai import AsyncOpenAI
     from engine.agents.common import ModelSettings, make_model
     from engine.agents.hooks import RequestBudget
@@ -188,7 +190,9 @@ def test_real_sdk_red_round_uses_http_and_corrects_fabricated_report(round_numbe
 
 
 def test_worker_model_timeout_is_explicit_and_smoke_default_preserved():
+    pytest.importorskip("openai")
     pytest.importorskip("strands")
+    pytest.importorskip("dotenv")
     from engine.agents.common import ModelSettings, make_model
     settings = ModelSettings(provider="akamai", model_id="test", api_key="test", base_url="https://sdk-smoke.invalid/v1")
     assert make_model(settings).client_args["timeout"] == 30

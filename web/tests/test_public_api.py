@@ -142,6 +142,35 @@ def test_human_test_without_s3_stores_no_trail(client):
         assert row["trail_key"] is None
 
 
+def test_human_test_requires_a_real_device(client):
+    """engine.gate() raises on a human_test row with a bad device, and /v1/lab/reset
+    keeps human traces, so such a row would break the gate permanently."""
+    for bad in (None, "phone", "", "Mouse", [], {}, ["mouse"], {"device": "mouse"}, 1, True):
+        cid = challenge(client, sid())
+        t = trail(cohort="human_test", tester={"consent": True})
+        t["device"] = bad
+        r = client.post(f"/v1/challenges/{cid}/attempt", json=t)
+        assert r.status_code == 422, f"device={bad!r} gave {r.status_code}"
+        assert db.one("SELECT 1 FROM attempts WHERE challenge_id=%s", cid) is None
+        assert db.one("SELECT attempts FROM challenges WHERE id=%s", cid)["attempts"] == 0
+    cid = challenge(client, sid())
+    t = trail(cohort="human_test", tester={"consent": True})
+    del t["device"]
+    r = client.post(f"/v1/challenges/{cid}/attempt", json=t)
+    assert r.status_code == 422
+    # No attempt row was written for any of the refused requests.
+    assert db.one("SELECT 1 FROM attempts WHERE challenge_id=%s", cid) is None
+
+
+@pytest.mark.parametrize("cohort", [[], {}, ["red"], {"cohort": "red"}, 1, True, ""])
+def test_malformed_cohort_is_rejected_before_using_challenge(client, cohort):
+    cid = challenge(client, sid())
+    response = client.post(f"/v1/challenges/{cid}/attempt", json=trail(cohort=cohort))
+    assert response.status_code == 422
+    assert db.one("SELECT attempts FROM challenges WHERE id=%s", cid)["attempts"] == 0
+    assert db.one("SELECT 1 FROM attempts WHERE challenge_id=%s", cid) is None
+
+
 def test_short_trail_422(client):
     cid = challenge(client, sid())
     r = client.post(f"/v1/challenges/{cid}/attempt", json=trail(ms=500))
@@ -218,11 +247,11 @@ def test_challenge_rate_limit(client):
     challenge(client, s, headers=LAB)
 
 
-def test_ip_ceiling_and_forwarded_for(client, monkeypatch):
+def test_ip_ceiling_cannot_be_bypassed_with_forwarded_for(client, monkeypatch):
     monkeypatch.setattr(config, "IP_PER_MIN", 3)
     h = {"X-Forwarded-For": "203.0.113.7, 10.0.0.1"}
     for _ in range(3):
         assert client.post("/v1/challenges", json={"session_id": sid()}, headers=h).status_code == 200
     assert client.post("/v1/challenges", json={"session_id": sid()}, headers=h).status_code == 429
     h2 = {"X-Forwarded-For": "203.0.113.8"}
-    assert client.post("/v1/challenges", json={"session_id": sid()}, headers=h2).status_code == 200
+    assert client.post("/v1/challenges", json={"session_id": sid()}, headers=h2).status_code == 429

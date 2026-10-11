@@ -1,7 +1,7 @@
 # Person 2 engine and agent operations
 
 The engine, Red, Blue, fixed gate, and queue worker are implemented under `engine/`.
-The platform remains Person 1's `web/` on `p1-platform`. Our branch is **p2**.
+The reviewed platform and engine are integrated on **p2**, pending PR #2 review.
 
 ## Install and run
 
@@ -107,8 +107,9 @@ Check another checkout without changing its DB:
 ```
 
 This command checks route presence and adapter behavior. The full integrated
-suite has also run against a disposable local PostgreSQL 18 database. Docker
-builds and the live Akamai deployment remain separate verification steps.
+suite has also run against a disposable local PostgreSQL 18 database. GitHub CI
+has built both Docker images and verified their real-engine imports. Live Akamai
+deployment remains a separate verification step.
 
 Use the canonical deployment script from a prepared VM checkout:
 
@@ -116,9 +117,10 @@ Use the canonical deployment script from a prepared VM checkout:
 bash deploy.sh engine
 ```
 
-The script builds an isolated release snapshot using platform `p1-platform` and
-engine `p2`, preserving the operator's checkout. After PR #2 merges, use
-`BRANCH=main bash deploy.sh engine`. It builds the app and dedicated worker image,
+The script builds an isolated snapshot of the whole integrated `p2` revision,
+preserving the operator's checkout. Pin a reviewed commit with
+`RELEASE_REF=<commit-sha> bash deploy.sh engine`. After PR #2 merges, use
+`RELEASE_REF=origin/main bash deploy.sh engine`. It builds the app and dedicated worker image,
 waits for app health, and checks the authenticated API. It does not provision a VM.
 
 The Compose override selects `engine/Dockerfile`, persists worker state, and opts
@@ -138,8 +140,9 @@ dispatch. Scripted SDK fixtures never go into `human_traces/`.
 Integrated local verification: 172 Python tests passed with two expected skips,
 and 12 frontend tests passed. The browser completed skip, proof of work, reservation,
 and single-use token rejection. Desktop and 390 px layouts were inspected. The
-dependency consistency check found no conflicts. Container and live cloud checks
-remain outstanding until their respective environments are available.
+dependency consistency check found no conflicts. Container builds and packaged
+imports also pass in GitHub CI. Live cloud checks remain outstanding until the
+team provides the existing deployment endpoint.
 
 Live Akamai Red completed seven attacks with four passes against provisional v1.
 Live Blue proposed one candidate reducing accepted forgeries from 9/16 to 6/16;
@@ -155,6 +158,21 @@ recording and rerun `python -m engine.calibrate` before coordinating shared-band
 changes with Person 1. Never force the gate or tune forgeries to manufacture a win.
 
 Local replay evidence is saved in ignored `engine/.state/verified-cycle.jsonl`.
-If shown as a recording, label it **REPLAY**. Local runtime evidence, credentials,
-human recordings, and changes to todo and phase notes are excluded from this
-implementation commit.
+If shown as a recording, label it **REPLAY**. Runtime evidence and credentials stay
+ignored. The user subsequently authorized committing the planning notes and nine
+consented team recordings; those are included in PR #2.
+
+## Reciprocal review decisions
+
+Keep the strict gate: when the baseline blocks all stored forgeries, retaining it
+is a valid no-change outcome. A successor still requires demonstrated improvement;
+new Red evidence can justify another Blue round. No contract change was made.
+
+Keep the provisional 0.75 threshold. With four enabled features, changing it to
+0.70 would accept exactly the same scores. Extra features or wider bands require
+real calibration across devices; synthetic trails do not establish human margin.
+
+Legacy human evidence with an invalid device fails gate evaluation with the
+affected attempt IDs. Correct only verified metadata; do not silently discard
+recordings to make a candidate pass. New malformed device/cohort inputs are rejected
+before consuming challenge attempts.

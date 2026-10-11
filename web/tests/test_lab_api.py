@@ -140,6 +140,18 @@ def test_post_variant_and_conflict(client):
     assert client.post("/v1/variants", headers=LAB, json=bad).status_code == 422
 
 
+def test_gate_bad_evidence_is_422_not_500(client, real_gate):
+    """The real engine.gate() raises on a human row with a bad device. The dashboard must
+    see a 422, never a 500 -- and /v1/lab/reset keeps human traces, so a bad row would
+    otherwise break the gate permanently. routes_public.py now refuses to create one."""
+    add_attempt("human_test", device=None)
+    add_attempt("red", round_id="run_bad")
+    client.post("/v1/variants", headers=LAB, json=variant("vt_bad"))
+    r = client.post("/v1/lab/gate", headers=LAB, json={"candidate_id": "vt_bad"})
+    assert r.status_code in (200, 422), r.status_code
+    db.exec("DELETE FROM attempts WHERE cohort='human_test' AND device IS NULL")
+
+
 def test_gate(client, real_gate):
     add_attempt("human_test")
     add_attempt("red", round_id="run_g")
@@ -430,6 +442,23 @@ def test_stub_gate_fails_closed(client, monkeypatch):
     monkeypatch.setattr(engine_adapter, "USING_STUBS", True)
     assert client.post("/v1/lab/gate", headers=LAB, json={"candidate_id": "vt_stub"}).status_code == 503
     assert client.post("/v1/lab/approvals", headers=LAB, json={"variant_id": "vt_stub"}).status_code == 503
+
+
+def test_retained_invalid_human_device_is_diagnosed_without_discarding_evidence(client, real_gate):
+    client.post("/v1/lab/reset", headers=LAB)
+    reviewable_variant(client, "vt_legacy_device")
+    invalid = add_attempt("human_test", device=None)
+    try:
+        response = client.post("/v1/lab/gate", headers=LAB, json={"candidate_id": "vt_legacy_device"})
+        assert response.status_code == 422
+        assert invalid in response.json()["detail"]
+        assert "device" in response.json()["detail"]
+        assert client.post("/v1/lab/approvals", headers=LAB, json={"variant_id": "vt_legacy_device"}).status_code == 422
+        client.post("/v1/lab/reset", headers=LAB)
+        assert db.one("SELECT device FROM attempts WHERE id=%s", invalid) == {"device": None}
+    finally:
+        # Remove only this deliberately invalid test fixture, never real evidence.
+        db.exec("DELETE FROM attempts WHERE id=%s", invalid)
 
 def test_reset(client, real_gate):
     client.post("/v1/lab/reset", headers=LAB)

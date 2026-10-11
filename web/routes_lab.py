@@ -208,6 +208,13 @@ def _evaluate(conn, candidate_id: str) -> tuple[dict, str]:
     baseline = active["config"]
     humans = conn.execute("SELECT id, device, features FROM attempts WHERE cohort='human_test' ORDER BY id").fetchall()
     forged = conn.execute("SELECT id, round_id, features FROM attempts WHERE cohort='red' ORDER BY id").fetchall()
+    invalid_devices = [r["id"] for r in humans
+                       if not isinstance(r["device"], str) or r["device"] not in {"mouse", "trackpad", "touch"}]
+    if invalid_devices:
+        # Preserve historical evidence; never silently omit a represented human.
+        shown = ", ".join(invalid_devices[:20])
+        raise HTTPException(422, f"{len(invalid_devices)} retained human attempt(s) have invalid devices: {shown}. "
+                                 "Review and correct their device metadata before gate evaluation.")
     try:
         VariantIn.model_validate(row["config"])
         VariantIn.model_validate(baseline)

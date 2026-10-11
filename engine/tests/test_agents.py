@@ -5,7 +5,8 @@ import json
 
 import pytest
 
-pytest.importorskip("strands", reason="install engine/requirements-agents.txt for Phase 2 tests")
+for dependency in ("openai", "strands", "dotenv"):
+    pytest.importorskip(dependency, reason="install engine/requirements-agents.txt for agent tests")
 
 import httpx
 from openai import AsyncOpenAI
