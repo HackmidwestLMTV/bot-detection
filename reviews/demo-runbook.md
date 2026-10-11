@@ -14,32 +14,34 @@ branch name.
 
 In order. Don't debug live — fall back, then debug after you're off stage.
 
-1. **Redeploy the last known-good build and demo that.** Per the contract's final-merge
-   checklist: *"If the merge breaks and can't be fixed by 7:00, redeploy the 11 PM setup
-   (`p1-platform` + `engine/` copied from `origin/p2` at deploy time) and demo that. It has
-   been running all night, so it's your safest build."* Concretely:
-   ```bash
-   ssh root@<vm-ip>
-   cd ~/followit
-   bash deploy.sh engine          # platform + origin/p2, no BRANCH= override — the overnight combo
-   ```
-   If even that's shaky, go one step further and drop `engine` entirely:
-   ```bash
-   bash deploy.sh                 # platform only, stops the worker — ticket page still works
-   ```
+> **DO NOT DEPLOY OR PUSH FIXES AFTER THE 08:00 CDT FREEZE.** Hack Midwest's rules state:
+> *"No additional features or bugfixes are allowed during this period, or you will be
+> disqualified."* An earlier version of this section opened by telling you to redeploy on
+> stage. That is now a disqualification risk, not a fallback. **Everything below is
+> read-only or replays an already-recorded file.** The deploy commands that used to be
+> here have moved to §1, for use *before* the freeze only.
+
+1. **If the live site misbehaves, do not fix it — switch to the recorded run.**
+   Nothing on stage should require a deploy, an SSH session, or a code change.
+   The site is live at `https://172-238-40-140.sslip.io` and was verified end to end
+   (browser E2E 8/8, concurrency `1 success, 19 rejected` against its managed Postgres).
+   If something still goes wrong, go straight to step 2 rather than touching the VM.
 2. **If the live site itself is unreachable or flaky, play the recorded backup run instead
    of anything live.**
    ```bash
-   # on your laptop, pointed at the deployed site
-   python -m web.dev.replay_events https://$DOMAIN --file backup_run.jsonl --reset
+   # on your laptop, pointed at the deployed site. This REPLAYS a recorded file --
+   # it is not a deploy and not a code change, so it is safe after the freeze.
+   python -m web.dev.replay_events https://172-238-40-140.sslip.io \
+       --file recordings/rehearsal-synthetic-humans.jsonl --reset
    ```
    Then open `https://$DOMAIN/lab?replay=1` on the venue screen — the REPLAY banner confirms
    it to the audience, and the Run Red / Run Blue / Reset buttons are disabled (this is a
    recording, not a live run; nothing you click can break it). Narrate it as "this is the
    actual run we recorded overnight" — that's true, and it's the honest framing, not a trick.
-   `recordings/rehearsal-synthetic-humans.jsonl` is a COMPLETE cycle you can replay today,
-   but its gate numbers rest on SYNTHETIC human traces -- say that out loud, or better, record
-   a real one first (see §5). If no recording exists at all, record one now before you need it.
+   That file is a COMPLETE cycle (Red -> Blue -> gate -> approval -> activation) but its gate
+   numbers rest on SYNTHETIC human traces, so say that out loud. `backup_run.jsonl` no longer
+   exists -- an empty file of that name was removed because it would have replayed nothing
+   while appearing to work.
 3. **If /lab itself won't load at all**, fall back to the ticket page only (`https://$DOMAIN/`)
    and narrate the Red/Blue/gate concept verbally using the gate numbers from your last
    successful run. A half demo beats a frozen screen.
@@ -186,8 +188,10 @@ exact commands/clicks. Run top to bottom.
 - [ ] **Concurrency test prints the exact line.**
       `FOLLOWIT_LIVE_URL=https://$DOMAIN .venv/bin/pytest -s web/tests/test_concurrency.py`
       → output contains `1 success, 19 rejected`.
-- [ ] **Record the backup run** (see §5) and confirm `backup_run.jsonl` exists and is non-empty
-      (`wc -l backup_run.jsonl`).
+- [ ] **Backup run exists and is COMPLETE** -- `recordings/rehearsal-synthetic-humans.jsonl`
+      (48 events). Confirm it contains all three of `gate_result`, `approval_needed` and
+      `variant_activated`, not just a Red round:
+      `grep -o '"type": "[a-z_]*"' recordings/*.jsonl | sort | uniq -c`
 - [ ] **README reflects the deployed state**, submit by 8:00.
 
 ---
@@ -199,11 +203,11 @@ ad-lib longer.
 
 | # | Action | Say |
 |---|---|---|
-| 1 | On a phone, open `https://$DOMAIN/` (must be the **https** URL, never `http://ip:8000`). Follow the comet for 3 seconds. | "This is the real checkout gate: follow a comet with your finger for three seconds, and a live model scores how human that motion looked." |
+| 1 | On a phone, open `https://$DOMAIN/` (must be the **https** URL, never `http://ip:8000`). Follow the comet for 3 seconds. | "This is the checkout. Follow the comet for three seconds. Five fixed measurements of your hand -- lag, error, sub-movements, jitter -- are scored against a published rule. No model runs here, and the score is not a probability that you are human." |
 | 2 | Show the pass → reserve a ticket, get a reservation id. | "Pass, and you get a single-use token — reserved, done." |
 | 3 | Try to reuse the same token (reload and reserve again, or hit the API a second time) → 409. | "That token is single-use, enforced by an atomic database update — not a client check. Reuse it and it's rejected, no race." |
-| 4 | Switch to `https://$DOMAIN/lab` on the venue screen. Click **Run Red**, let a few events stream. | "This is Red — an AI agent learning to fake that same hand motion against the live scorer, right now." |
-| 5 | Click **Run Blue**, let the gate result render (point at the human-rejected and forgeries-passed numbers). | "Blue proposes a stricter rule. Before anything ships, a fixed gate — no model, just arithmetic — replays every stored human trace and every forgery against it." |
+| 4 | Switch to `https://$DOMAIN/lab` on the venue screen. Click **Run Red**, let a few events stream. | "This is Red: an agent built on AWS's Strands SDK, running on Akamai-hosted inference, learning to forge that same hand motion against the live scorer right now." |
+| 5 | Click **Run Blue**, let the gate result render (point at the human-rejected and forgeries-passed numbers). | "Blue proposes a stricter rule. Before it can ship, a fixed gate -- no model, just arithmetic -- replays every stored human trace and every forgery against it, and reports how many real people the new rule would have locked out, per device." |
 | 6 | Click **Approve**. Point at the active-variant metric updating. | "A person has to press this. The server enforces that too — try to activate a variant without an approval, and it's a hard 403, not just a UI guard." |
 
 That's the whole arc: human passes → bot tries → gate checks → human approves → rule goes
@@ -232,11 +236,11 @@ live. Don't run Blue a second time in the same sitting (see §6) — end on the 
 ## 5. Recording the REPLAY backup (do this once you have a clean successful run)
 
 ```bash
-python -m web.dev.record_events https://$DOMAIN backup_run.jsonl
+python -m web.dev.record_events https://172-238-40-140.sslip.io recordings/live-run.jsonl
 # now, on /lab: Run Red, Run Blue, Approve — the recorder stops itself after variant_activated
-python -m web.dev.replay_events https://$DOMAIN --file backup_run.jsonl --reset   # verify it plays back
+python -m web.dev.replay_events https://172-238-40-140.sslip.io --file recordings/live-run.jsonl --reset   # verify it plays back
 ```
-Keep `backup_run.jsonl` somewhere you can reach even if the VM is unreachable (laptop, not just
+Keep the recording somewhere you can reach even if the VM is unreachable (laptop, not just
 the VM) — it's your §0 fallback.
 
 ---

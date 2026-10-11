@@ -29,19 +29,46 @@
      everyone else silently got Roboto on Android or Segoe UI on Windows. */
   --font: Archivo, 'Helvetica Neue', Helvetica, ui-sans-serif, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  /* One shell for every page: header, main and footer share a max-width and a gutter, so
+     the brand, the breadcrumb and the footer sit on the same vertical rule at every width.
+     The old `padding: 20px 5%` resolved against the viewport, so the header's inner column
+     got NARROWER as the screen got wider (1144 px of content at 2560, 1256 at 1440) and
+     drifted 36 px out of line with <main>. A fixed clamp keeps the gutter honest. */
+  --gutter: clamp(20px, 3.4vw, 36px);
+  --shell: 1260px;
+  /* Left/right gutters grow to clear a notch in landscape; bottom clears the home bar. */
+  --gutter-l: max(var(--gutter), env(safe-area-inset-left));
+  --gutter-r: max(var(--gutter), env(safe-area-inset-right));
 }
+/* The widest desks get a wider shell rather than a 1260 px ribbon marooned in paper.
+   At 1700+ the checkout canvas lands near its native 600 logical px, which is also the
+   crispest it can be. */
+@media(min-width:1700px) { :root { --shell: 1420px; } }
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+/* 100% keeps iOS from inflating text when a phone is turned to landscape. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 /* Paper grain: a tiny SVG turbulence tile, so the background has tooth instead of
    being a flat fill. Inline data URI -- no extra request, no external asset. */
 body {
   margin: 0; color: var(--fg); font: 15px/1.6 var(--font);
   background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.045'/%3E%3C/svg%3E");
   font-variation-settings: 'wdth' 100;
+  /* Sticky footer: on a 1440 px-tall screen the page used to stop two thirds of the way
+     down with the footer rule floating in the middle of the paper. vh first, then dvh
+     where it exists, so iOS measures the viewport it actually has. */
+  min-height: 100vh; display: flex; flex-direction: column;
 }
+@supports(min-height:100dvh) { body { min-height: 100dvh; } }
+main { flex: 1 0 auto; }
 button, input { font: inherit; }
 a { color: inherit; text-underline-offset: 4px; }
-button, a, input { -webkit-tap-highlight-color: transparent; }
+button, a, input, label, summary { -webkit-tap-highlight-color: transparent; }
+/* iOS zooms the whole page when a focused field is under 16 px, which throws the layout
+   out mid-demo and leaves the page scrolled sideways. The page's own 13-15 px field rules
+   are more specific than any plain selector here, so this one earns its !important. */
+@media(hover:none) and (pointer:coarse) {
+  input, select, textarea { font-size: 16px !important; }
+}
 button { cursor: pointer; }
 [hidden] { display: none !important; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
@@ -50,17 +77,36 @@ h1,h2,h3,p { margin: 0; }
 .muted { color: var(--muted); }
 /* Eyebrows and identifiers are the instrument's voice: monospace, not tracked sans. */
 .eyebrow { font: 500 11px/1.5 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
-.site-header { min-height: 78px; max-width: 1400px; margin: auto; padding: 20px 5%; display: flex; gap: 24px; align-items: center; border-bottom: 1px solid var(--line); }
+.site-header { min-height: 78px; max-width: var(--shell); margin-inline: auto; width: 100%;
+  padding-block: 16px; padding-inline: var(--gutter-l) var(--gutter-r);
+  display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center; border-bottom: 1px solid var(--line); }
 .brand { display: inline-flex; gap: 10px; align-items: center; text-decoration: none; font-size: 23px; font-weight: 800; letter-spacing: -.045em; white-space: nowrap; font-variation-settings: 'wdth' 92; }
-.brand-mark { width: 26px; height: 26px; border: 6px solid var(--accent); border-radius: 50%; position: relative; display: inline-block; }
+.brand-mark { width: 26px; height: 26px; border: 6px solid var(--accent); border-radius: 50%; position: relative; display: inline-block; flex: none; }
 .brand-mark::after { content: ''; width: 9px; height: 9px; background: var(--accent); position: absolute; right: -9px; top: -6px; border-radius: 50%; }
-.site-nav { margin-left: auto; display: flex; align-items: center; gap: 24px; font-size: 13px; font-weight: 600; }
-.site-nav a { text-decoration: none; color: var(--muted); }
+.site-nav { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 2px 24px; font-size: 13px; font-weight: 600; }
+/* Nav labels break mid-phrase ("Ticket / demo", "Collect / recording|s") before they wrap
+   as whole links, and on /lab the third link pushed the header 8 px past a 320 px screen.
+   Keep each label intact and let the row wrap instead. The block padding is hit area:
+   a 13 px link is a 20 px target otherwise. */
+.site-nav a { text-decoration: none; color: var(--muted); white-space: nowrap; padding-block: 11px; }
 .site-nav a[aria-current] { color: var(--fg); }
-.pill { border: 1px solid var(--fg); border-radius: 0; padding: 5px 11px; font: 500 10px/1.4 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
-.site-footer { max-width: 1400px; margin: 0 auto; padding: 26px 5%; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.pill { border: 1px solid var(--fg); border-radius: 0; padding: 5px 11px; font: 500 10px/1.4 var(--mono); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+.site-footer { max-width: var(--shell); margin-inline: auto; width: 100%;
+  padding-block: 26px; padding-bottom: calc(26px + env(safe-area-inset-bottom));
+  padding-inline: var(--gutter-l) var(--gutter-r);
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 .site-footer strong { color: var(--fg); }
-.skip-link { position: fixed; left: 20px; top: -100px; z-index: 100; background: white; padding: 12px 20px; border-radius: 8px; }
-.skip-link:focus { top: 12px; }
-@media(max-width:600px) { .site-header { padding: 18px 20px; gap: 12px; } .site-nav { gap: 16px; } .site-header .pill { display: none; } }
+.skip-link { position: fixed; left: max(20px, env(safe-area-inset-left)); top: -100px; z-index: 100; background: white; padding: 12px 20px; border-radius: 8px; }
+.skip-link:focus { top: max(12px, env(safe-area-inset-top)); }
+/* The lab shell is owned by lab.css; it keeps its own vertical rhythm, but its horizontal
+   gutter joins the shared shell so the lab header and its content share one edge. */
+body .lab-shell { max-width: var(--shell); padding-inline: var(--gutter-l) var(--gutter-r); }
+/* Long evidence scrolls inside its own box on iOS instead of rubber-banding the page. */
+.log, .cmp { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+@media(max-width:600px) { .site-header { padding-block: 13px; gap: 6px 14px; min-height: 0; } .site-nav { gap: 0 14px; font-size: 12.5px; } .site-header .pill { display: none; } }
+/* Phone landscape: 390 px of height is the whole budget, so the chrome gives some back. */
+@media(max-height:540px) and (orientation:landscape) {
+  .site-header { min-height: 0; padding-block: 8px; }
+  .site-footer { padding-block: 18px; }
+}
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }

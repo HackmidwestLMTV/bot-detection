@@ -365,7 +365,7 @@ async function startPow(reason, keepResult = false) {
 const REASONS = {
   used: ['That pass has already been used. Each pass works for one reservation.', true],
   expired: ['That pass expired. Passes last 2 minutes.', true],
-  wrong_session: ['That pass belongs to a different browser session.', true],
+  wrong_session: ['That pass belongs to a different browser or device.', true],
   cap: ["You've reserved the most tickets allowed for this visit (2). Thanks for the enthusiasm!", false],
 };
 
