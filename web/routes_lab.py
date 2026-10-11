@@ -9,7 +9,9 @@ Events the SERVER emits (the worker must NOT post these itself, or the dashboard
   - variant_activated on POST /v1/variants/{id}/activate and on reset (agent "system")
 A worker-posted approval_needed whose approval_id is already in `approvals` is dropped as a duplicate.
 """
+import hashlib
 import json
+import math
 import pathlib
 import time
 from typing import Any, Literal
@@ -35,7 +37,7 @@ EventType = Literal["round_started", "tool_call", "tool_result", "attempt_scored
 # ---------- bodies ----------
 
 class VariantIn(BaseModel):
-    """Minimal shape check; every other field (parent, author, reason, ...) is stored as given."""
+    """Validate every scoring field, including disabled bands, before storing a rule."""
     model_config = ConfigDict(extra="allow")
     id: str
     features: dict[str, list[float]]
@@ -51,13 +53,27 @@ class VariantIn(BaseModel):
 
     @model_validator(mode="after")
     def _shape(self):
+        names = {"lag_ms", "err_mean_px", "submoves_per_s", "jitter_px", "power_law_beta"}
+        if set(self.features) != names:
+            raise ValueError("features must contain exactly the five contract features")
+        if not self.enabled or len(set(self.enabled)) != len(self.enabled):
+            raise ValueError("enabled must be nonempty and contain no duplicates")
+        if not math.isfinite(self.pass_threshold) or not 0 < self.pass_threshold <= 1:
+            raise ValueError("pass_threshold must be finite and in (0, 1]")
         for name, band in self.features.items():
-            if len(band) != 2 or band[0] > band[1]:
-                raise ValueError(f"features.{name} must be [lo, hi]")
+            if len(band) != 2 or not all(math.isfinite(v) for v in band) or band[0] >= band[1]:
+                raise ValueError(f"features.{name} must be finite [lo, hi] with lo < hi")
         missing = [n for n in self.enabled if n not in self.features]
         if missing:
             raise ValueError(f"enabled features without a band: {missing}")
         return self
+
+    @field_validator("pass_threshold", mode="before")
+    @classmethod
+    def _threshold_type(cls, value):
+        if isinstance(value, bool):
+            raise ValueError("pass_threshold must be numeric, not boolean")
+        return value
 
 
 class GateIn(BaseModel):
@@ -124,19 +140,23 @@ def create_variant(body: VariantIn):
 
 def _activate(variant_id: str) -> dict:
     with db.tx() as conn:
-        # serialize activations so two can't both read the same "previous"
-        conn.execute("SELECT pg_advisory_xact_lock(hashtext('followit.activate'))")
+        _lock_evidence(conn)
         if not conn.execute("SELECT 1 FROM variants WHERE id=%s", (variant_id,)).fetchone():
             raise HTTPException(404, "unknown variant")
-        appr = conn.execute("""SELECT id FROM approvals WHERE variant_id=%s AND status='approved'
+        appr = conn.execute("""SELECT * FROM approvals WHERE variant_id=%s AND status='approved'
+                               AND consumed_at IS NULL
                                ORDER BY decided_at DESC NULLS LAST LIMIT 1""", (variant_id,)).fetchone()
         if not appr:
             raise HTTPException(403, "variant has no approved approval")
-        prev = conn.execute("""SELECT id FROM variants WHERE status='active'
-                               ORDER BY created_at DESC LIMIT 1""").fetchone()
+        result, fingerprint = _evaluate(conn, variant_id)
+        if (result["verdict"] != "approve_for_review" or fingerprint != appr["evidence_fingerprint"]
+                or result != appr["gate"]):
+            raise HTTPException(403, "approval evidence or baseline changed; request a new review")
+        # Locks cover recomputation, single-use consumption, and the active-rule switch.
+        conn.execute("UPDATE approvals SET consumed_at=now() WHERE id=%s", (appr["id"],))
         conn.execute("UPDATE variants SET status='retired' WHERE status='active' AND id<>%s", (variant_id,))
         conn.execute("UPDATE variants SET status='active' WHERE id=%s", (variant_id,))
-    return {"variant_id": variant_id, "previous": prev["id"] if prev else None, "approval_id": appr["id"]}
+    return {"variant_id": variant_id, "previous": result["baseline"], "approval_id": appr["id"]}
 
 
 @router.post("/v1/variants/{variant_id}/activate")
@@ -164,18 +184,47 @@ def forgeries(round_id: str | None = Query(default=None)):
 
 # ---------- gate + approvals ----------
 
-def _run_gate(candidate_id: str) -> dict:
-    row = db.one("SELECT config FROM variants WHERE id=%s", candidate_id)
+def _lock_evidence(conn):
+    """Freeze the lab snapshot, including inserts that row locks cannot protect.
+
+    SHARE ROW EXCLUSIVE conflicts with PostgreSQL's ordinary write locks, so
+    public attempt inserts cannot slip between evaluation and activation. Lock
+    ordering is shared with reset; no cooperation from evidence writers needed.
+    These brief lab transactions intentionally favor correctness over throughput.
+    """
+    conn.execute("SELECT pg_advisory_xact_lock(hashtext('followit.activate'))")
+    conn.execute("LOCK TABLE variants, attempts, approvals IN SHARE ROW EXCLUSIVE MODE")
+
+
+def _evaluate(conn, candidate_id: str) -> tuple[dict, str]:
+    row = conn.execute("SELECT config FROM variants WHERE id=%s", (candidate_id,)).fetchone()
     if not row:
         raise HTTPException(404, "unknown candidate variant")
-    baseline = active_variant()
-    humans = [{"device": r["device"], "features": r["features"]}
-              for r in db.all("SELECT device, features FROM attempts WHERE cohort='human_test'")]
-    forged = [{"round_id": r["round_id"], "features": r["features"]}
-              for r in db.all("SELECT round_id, features FROM attempts WHERE cohort='red'")]
-    result = engine_adapter.gate(row["config"], baseline, humans, forged)
-    db.exec("INSERT INTO gate_decisions(id, candidate, baseline, result) VALUES (%s, %s, %s, %s)",
-            new_id("gd"), candidate_id, baseline["id"], db.Json(result))
+    if engine_adapter.USING_STUBS:
+        raise HTTPException(503, "real engine required for gate evaluation and activation")
+    active = conn.execute("SELECT config FROM variants WHERE status='active' ORDER BY created_at DESC LIMIT 1").fetchone()
+    if not active:
+        raise HTTPException(409, "no active baseline")
+    baseline = active["config"]
+    humans = conn.execute("SELECT id, device, features FROM attempts WHERE cohort='human_test' ORDER BY id").fetchall()
+    forged = conn.execute("SELECT id, round_id, features FROM attempts WHERE cohort='red' ORDER BY id").fetchall()
+    try:
+        VariantIn.model_validate(row["config"])
+        VariantIn.model_validate(baseline)
+        result = engine_adapter.gate(row["config"], baseline, humans, forged)
+        snapshot = {"candidate": row["config"], "baseline": baseline, "humans": humans, "forgeries": forged}
+        fingerprint = hashlib.sha256(json.dumps(snapshot, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+    except (ValueError, TypeError, KeyError) as exc:
+        raise HTTPException(422, "invalid variant or evidence; gate cannot be evaluated") from exc
+    return result, fingerprint
+
+
+def _run_gate(candidate_id: str) -> dict:
+    with db.tx() as conn:
+        _lock_evidence(conn)
+        result, _ = _evaluate(conn, candidate_id)
+        conn.execute("INSERT INTO gate_decisions(id, candidate, baseline, result) VALUES (%s, %s, %s, %s)",
+                     (new_id("gd"), candidate_id, result["baseline"], db.Json(result)))
     return result
 
 
@@ -186,21 +235,27 @@ async def run_gate(body: GateIn):
     return result
 
 
-def _create_approval(body: ApprovalIn) -> str:
-    if not db.one("SELECT 1 FROM variants WHERE id=%s", body.variant_id):
-        raise HTTPException(404, "unknown variant")
+def _create_approval(body: ApprovalIn) -> tuple[str, dict]:
     aid = new_id("apr")
-    db.exec("INSERT INTO approvals(id, interrupt_id, variant_id, gate, status) VALUES (%s, %s, %s, %s, 'pending')",
-            aid, body.interrupt_id, body.variant_id, db.Json(body.gate))
-    return aid
+    with db.tx() as conn:
+        _lock_evidence(conn)
+        result, fingerprint = _evaluate(conn, body.variant_id)
+        if result["verdict"] != "approve_for_review":
+            raise HTTPException(409, "candidate does not pass the server gate")
+        if body.gate is not None and body.gate != result:
+            raise HTTPException(409, "submitted gate does not match the current server gate")
+        conn.execute("""INSERT INTO approvals(id, interrupt_id, variant_id, gate, evidence_fingerprint, status)
+                        VALUES (%s, %s, %s, %s, %s, 'pending')""",
+                     (aid, body.interrupt_id, body.variant_id, db.Json(result), fingerprint))
+    return aid, result
 
 
 @router.post("/v1/lab/approvals")
 async def create_approval(body: ApprovalIn):
-    aid = await run_in_threadpool(_create_approval, body)
+    aid, gate = await run_in_threadpool(_create_approval, body)
     # The server is the single source of approval_needed (see module docstring).
     await _emit(body.run_id, "blue", "approval_needed",
-                {"approval_id": aid, "variant_id": body.variant_id, "gate": body.gate})
+                {"approval_id": aid, "variant_id": body.variant_id, "gate": gate})
     return {"approval_id": aid}
 
 
@@ -215,13 +270,20 @@ def get_approval(approval_id: str):
 @router.post("/v1/lab/approvals/{approval_id}/decide")
 def decide_approval(approval_id: str, body: DecideIn):
     status = "approved" if body.approve else "denied"
-    row = db.one("""UPDATE approvals SET status=%s, decided_at=now()
-                    WHERE id=%s AND status='pending' RETURNING status""", status, approval_id)
-    if row:
-        return {"status": row["status"]}
-    if not db.one("SELECT 1 FROM approvals WHERE id=%s", approval_id):
-        raise HTTPException(404, "unknown approval")
-    raise HTTPException(409, "approval already decided")
+    with db.tx() as conn:
+        _lock_evidence(conn)
+        row = conn.execute("SELECT * FROM approvals WHERE id=%s", (approval_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "unknown approval")
+        if row["status"] != "pending":
+            raise HTTPException(409, "approval already decided")
+        if body.approve:
+            result, fingerprint = _evaluate(conn, row["variant_id"])
+            if (result["verdict"] != "approve_for_review" or fingerprint != row["evidence_fingerprint"]
+                    or result != row["gate"]):
+                raise HTTPException(409, "approval evidence or baseline changed; request a new review")
+        conn.execute("UPDATE approvals SET status=%s, decided_at=now() WHERE id=%s", (status, approval_id))
+    return {"status": status}
 
 
 # ---------- worker command queue ----------
@@ -283,14 +345,14 @@ async def stream():
 def _reset() -> str | None:
     v1 = json.loads(_V1_FIXTURE.read_text())
     with db.tx() as conn:
-        conn.execute("SELECT pg_advisory_xact_lock(hashtext('followit.activate'))")
+        _lock_evidence(conn)
         prev = conn.execute("SELECT id FROM variants WHERE status='active' ORDER BY created_at DESC LIMIT 1").fetchone()
         conn.execute("DELETE FROM attempts WHERE cohort='red'")
         for table in ("approvals", "gate_decisions", "lab_commands", "lab_events"):
             conn.execute(f"DELETE FROM {table}")
         conn.execute("DELETE FROM variants WHERE id<>'v1'")
         conn.execute("""INSERT INTO variants(id, config, status) VALUES ('v1', %s, 'active')
-                        ON CONFLICT (id) DO UPDATE SET status='active'""", (db.Json(v1),))
+                        ON CONFLICT (id) DO UPDATE SET config=EXCLUDED.config, status='active'""", (db.Json(v1),))
     return prev["id"] if prev else None
 
 

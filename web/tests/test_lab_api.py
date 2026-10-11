@@ -40,11 +40,18 @@ def client():
         yield c
 
 
-def add_attempt(cohort, device="mouse", round_id=None, nondominant=False):
+@pytest.fixture
+def real_gate():
+    from web import engine_adapter
+    if engine_adapter.USING_STUBS:
+        pytest.skip("real engine required for gate/approval integration; include p2 on PYTHONPATH")
+
+
+def add_attempt(cohort, device="mouse", round_id=None, nondominant=False, features=None):
     aid = new_id("att")
     db.exec("""INSERT INTO attempts(id, challenge_id, cohort, device, nondominant_hand, round_id, features, score, pass)
                VALUES (%s, NULL, %s, %s, %s, %s, %s, 0.75, true)""",
-            aid, cohort, device, nondominant, round_id, db.Json(FEATS))
+            aid, cohort, device, nondominant, round_id, db.Json(FEATS if features is None else features))
     return aid
 
 
@@ -53,10 +60,26 @@ def variant(vid):
     return {**v, "id": vid, "parent": "v1", "author": "blue", "reason": "test"}
 
 
+def reviewable_variant(client, vid):
+    """Actual engine evidence: human lag 216.7 passes; forged lag 150 stops passing."""
+    cfg = variant(vid)
+    cfg["enabled"] = ["lag_ms"]
+    cfg["pass_threshold"] = 1
+    cfg["features"]["lag_ms"] = [200, 450]
+    add_attempt("human_test")
+    forged = {name: value["value"] for name, value in FEATS.items()}
+    forged["lag_ms"] = 150
+    add_attempt("red", features=forged)
+    assert client.post("/v1/variants", headers=LAB, json=cfg).status_code == 200
+    return cfg
+
+
 def approve(client, vid):
-    aid = client.post("/v1/lab/approvals", headers=LAB,
-                      json={"interrupt_id": "int_1", "variant_id": vid, "gate": {"verdict": "approve_for_review"}}
-                      ).json()["approval_id"]
+    gate = client.post("/v1/lab/gate", headers=LAB, json={"candidate_id": vid}).json()
+    response = client.post("/v1/lab/approvals", headers=LAB,
+                           json={"interrupt_id": "int_1", "variant_id": vid, "gate": gate})
+    assert response.status_code == 200, response.text
+    aid = response.json()["approval_id"]
     assert client.post(f"/v1/lab/approvals/{aid}/decide", headers=LAB, json={"approve": True}).status_code == 200
     return aid
 
@@ -117,7 +140,7 @@ def test_post_variant_and_conflict(client):
     assert client.post("/v1/variants", headers=LAB, json=bad).status_code == 422
 
 
-def test_gate(client):
+def test_gate(client, real_gate):
     add_attempt("human_test")
     add_attempt("red", round_id="run_g")
     client.post("/v1/variants", headers=LAB, json=variant("vt_gate"))
@@ -133,28 +156,29 @@ def test_gate(client):
 
 # ---------- approvals + activate ----------
 
-def test_activate_without_approval_403(client):
-    client.post("/v1/variants", headers=LAB, json=variant("vt_noappr"))
+def test_activate_without_approval_403(client, real_gate):
+    reviewable_variant(client, "vt_noappr")
     assert client.post("/v1/variants/vt_noappr/activate", headers=LAB).status_code == 403
     assert client.post("/v1/variants/missing/activate", headers=LAB).status_code == 404
     # a pending or denied approval is not enough
     aid = client.post("/v1/lab/approvals", headers=LAB, json={"interrupt_id": "i", "variant_id": "vt_noappr",
-                                                              "gate": {}}).json()["approval_id"]
+                                                              }).json()["approval_id"]
     assert client.post("/v1/variants/vt_noappr/activate", headers=LAB).status_code == 403
     client.post(f"/v1/lab/approvals/{aid}/decide", headers=LAB, json={"approve": False})
     assert client.get(f"/v1/lab/approvals/{aid}", headers=LAB).json() == {"status": "denied"}
     assert client.post("/v1/variants/vt_noappr/activate", headers=LAB).status_code == 403
 
 
-def test_approval_flow_and_activate(client):
-    client.post("/v1/variants", headers=LAB, json=variant("vt_act"))
+def test_approval_flow_and_activate(client, real_gate):
+    reviewable_variant(client, "vt_act")
+    gate = client.post("/v1/lab/gate", headers=LAB, json={"candidate_id": "vt_act"}).json()
     r = client.post("/v1/lab/approvals", headers=LAB,
-                    json={"interrupt_id": "int_9", "variant_id": "vt_act", "gate": {"verdict": "approve_for_review"},
+                    json={"interrupt_id": "int_9", "variant_id": "vt_act", "gate": gate,
                           "run_id": "run_b"})
     aid = r.json()["approval_id"]
     assert client.get(f"/v1/lab/approvals/{aid}", headers=LAB).json() == {"status": "pending"}
     ev = db.one("SELECT run_id, body FROM lab_events WHERE body->>'type'='approval_needed' ORDER BY id DESC LIMIT 1")
-    assert ev["body"]["data"] == {"approval_id": aid, "variant_id": "vt_act", "gate": {"verdict": "approve_for_review"}}
+    assert ev["body"]["data"] == {"approval_id": aid, "variant_id": "vt_act", "gate": gate}
 
     # a worker re-posting the same approval_needed is dropped (no double card)
     n = db.one("SELECT count(*) AS n FROM lab_events")["n"]
@@ -298,10 +322,120 @@ def test_slow_subscriber_is_dropped():
 
 # ---------- reset (last: wipes lab state) ----------
 
-def test_reset(client):
+def test_forged_gate_and_missing_evidence_cannot_create_approval(client, real_gate):
+    client.post("/v1/lab/reset", headers=LAB)
+    client.post("/v1/variants", headers=LAB, json=variant("vt_unchanged"))
+    assert client.post("/v1/lab/approvals", headers=LAB, json={
+        "variant_id": "vt_unchanged", "gate": {"verdict": "approve_for_review"}}).status_code == 409
+    reviewable_variant(client, "vt_valid")
+    assert client.post("/v1/lab/approvals", headers=LAB, json={
+        "variant_id": "vt_valid", "gate": {"verdict": "approve_for_review"}}).status_code == 409
+    assert db.one("SELECT count(*) AS n FROM approvals")["n"] == 0
+
+
+@pytest.mark.parametrize("change", ["insert", "update", "delete", "baseline", "candidate", "active_baseline"])
+@pytest.mark.parametrize("already_decided", [False, True])
+def test_approval_binds_exact_evidence_and_rules(client, real_gate, change, already_decided):
+    client.post("/v1/lab/reset", headers=LAB)
+    reviewable_variant(client, "vt_stale")
+    aid = client.post("/v1/lab/approvals", headers=LAB, json={"variant_id": "vt_stale"}).json()["approval_id"]
+    if already_decided:
+        assert client.post(f"/v1/lab/approvals/{aid}/decide", headers=LAB, json={"approve": True}).status_code == 200
+    if change == "insert":
+        add_attempt("human_test")  # Even unchanged counts of failures require a fresh review.
+    elif change == "update":
+        db.exec("UPDATE attempts SET features=jsonb_set(features, '{lag_ms}', '151') WHERE cohort='red'")
+    elif change == "delete":
+        db.exec("DELETE FROM attempts WHERE cohort='red'")
+    elif change == "active_baseline":
+        other = variant("other_baseline")
+        db.exec("UPDATE variants SET status='retired' WHERE status='active'")
+        db.exec("INSERT INTO variants(id, config, status) VALUES (%s, %s, 'active')", other["id"], db.Json(other))
+    else:
+        vid = "v1" if change == "baseline" else "vt_stale"
+        db.exec("UPDATE variants SET config=jsonb_set(config, '{reason}', '\"changed\"') WHERE id=%s", vid)
+    if already_decided:
+        assert client.post("/v1/variants/vt_stale/activate", headers=LAB).status_code == 403
+    else:
+        assert client.post(f"/v1/lab/approvals/{aid}/decide", headers=LAB, json={"approve": True}).status_code == 409
+    expected = "other_baseline" if change == "active_baseline" else "v1"
+    assert client.get("/v1/variants/active", headers=LAB).json()["id"] == expected
+    assert db.one("SELECT consumed_at FROM approvals WHERE id=%s", aid)["consumed_at"] is None
+
+
+def test_legacy_approval_cannot_activate(client, real_gate):
+    client.post("/v1/lab/reset", headers=LAB)
+    reviewable_variant(client, "vt_legacy")
+    db.exec("INSERT INTO approvals(id, variant_id, status) VALUES ('legacy', 'vt_legacy', 'approved')")
+    assert client.post("/v1/variants/vt_legacy/activate", headers=LAB).status_code == 403
+
+
+def test_concurrent_activation_consumes_approval_once(client, real_gate):
+    from concurrent.futures import ThreadPoolExecutor
+
+    client.post("/v1/lab/reset", headers=LAB)
+    reviewable_variant(client, "vt_once")
+    aid = approve(client, "vt_once")
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: client.post("/v1/variants/vt_once/activate", headers=LAB), range(2)))
+    assert sorted(r.status_code for r in results) == [200, 403]
+    assert db.one("SELECT consumed_at FROM approvals WHERE id=%s", aid)["consumed_at"] is not None
+    assert client.post("/v1/variants/vt_once/activate", headers=LAB).status_code == 403
+
+
+def test_evidence_insert_cannot_race_activation(client, real_gate, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from web import routes_lab
+
+    client.post("/v1/lab/reset", headers=LAB)
+    reviewable_variant(client, "vt_race")
+    approve(client, "vt_race")
+    evaluated = threading.Event()
+    release = threading.Event()
+    original = routes_lab._evaluate
+
+    def paused(conn, vid):
+        result = original(conn, vid)
+        evaluated.set()
+        assert release.wait(10), "test did not release activation"
+        return result
+
+    def write_evidence():
+        with psycopg.connect(config.DATABASE_URL, application_name="followit_test_evidence_writer") as conn:
+            conn.execute("INSERT INTO attempts(id, cohort, device, features) VALUES (%s, 'human_test', 'mouse', %s)",
+                         (new_id("att"), db.Json(FEATS)))
+
+    monkeypatch.setattr(routes_lab, "_evaluate", paused)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        activation = executor.submit(client.post, "/v1/variants/vt_race/activate", headers=LAB)
+        assert evaluated.wait(10)
+        writer = executor.submit(write_evidence)
+        try:
+            deadline = time.monotonic() + 5
+            while not db.one("SELECT 1 FROM pg_stat_activity WHERE application_name='followit_test_evidence_writer' AND wait_event_type='Lock'"):
+                assert time.monotonic() < deadline, "evidence writer was not protected by the snapshot lock"
+                time.sleep(0.02)
+            assert not writer.done()
+        finally:
+            release.set()
+        assert activation.result(timeout=10).status_code == 200
+        writer.result(timeout=10)
+
+
+def test_stub_gate_fails_closed(client, monkeypatch):
+    from web import engine_adapter
+
+    client.post("/v1/lab/reset", headers=LAB)
+    client.post("/v1/variants", headers=LAB, json=variant("vt_stub"))
+    monkeypatch.setattr(engine_adapter, "USING_STUBS", True)
+    assert client.post("/v1/lab/gate", headers=LAB, json={"candidate_id": "vt_stub"}).status_code == 503
+    assert client.post("/v1/lab/approvals", headers=LAB, json={"variant_id": "vt_stub"}).status_code == 503
+
+def test_reset(client, real_gate):
+    client.post("/v1/lab/reset", headers=LAB)
     human = add_attempt("human_test")
     red = add_attempt("red", round_id="run_r")
-    client.post("/v1/variants", headers=LAB, json=variant("vt_reset"))
+    reviewable_variant(client, "vt_reset")
     approve(client, "vt_reset")
     assert client.post("/v1/variants/vt_reset/activate", headers=LAB).status_code == 200
     client.post("/v1/lab/runs", headers=LAB, json={"kind": "blue"})

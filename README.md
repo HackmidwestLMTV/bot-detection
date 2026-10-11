@@ -31,7 +31,7 @@ The full contract between the two halves is in [contracts/CONTRACT.md](contracts
 |---|---|---|
 | `contracts/` | shared, frozen; changes go through Person 2 and are logged in `CHANGELOG.md` | `main` |
 | `web/` + `Dockerfile`, `compose.yaml`, `Caddyfile`, `deploy.sh`, `vm_setup.sh` | Person 1 | `p1-platform` |
-| `engine/` | Person 2 | `p2-engine` |
+| `engine/` | Person 2 | `p2` |
 
 ## Env vars
 `DATABASE_URL`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_KEY`, `S3_SECRET`, `LAB_KEY`, `POW_BITS`, `DOMAIN`, `PUBLIC_URL`, `ACME_CA` (optional), `API_BASE`, `AKAMAI_BASE_URL`, `AKAMAI_API_KEY`, `MODEL_ID`. See [.env.example](.env.example).
@@ -46,9 +46,13 @@ Print `https://$DOMAIN/qr` for the table. It's a QR code to tester mode (`/?test
 
 ## Deploy (Linode)
 1. Create the Managed Postgres **first**, because it takes 5–10 minutes to provision (details below). While it provisions, create the VM (Ubuntu 24.04, `g6-standard-2`) and the bucket plus a key scoped to it. The Cloud Firewall must allow TCP 22, 80 and 443.
-2. On the VM, as root: `bash vm_setup.sh`. It installs Docker, clones the repo, and writes `.env` with a fresh `LAB_KEY` and `DOMAIN=<ip-with-dashes>.sslip.io`, so HTTPS works with no DNS setup.
+2. Copy `vm_setup.sh` to the VM, then as root run `bash vm_setup.sh`. It installs Docker, clones `p1-platform` explicitly, and atomically writes a private `.env` with a fresh `LAB_KEY` and `DOMAIN=<ip-with-dashes>.sslip.io`. Set `BRANCH=main` after the platform has merged, or set `DOMAIN` to use your own hostname. Existing `.env` files are preserved; keys are never printed.
 3. Fill `DATABASE_URL`, `S3_KEY`, `S3_SECRET` and `AKAMAI_API_KEY` in `~/followit/.env`.
-4. `~/followit/deploy.sh` (platform only), or `~/followit/deploy.sh engine` (adds Person 2's latest `engine/` and the worker), or `BRANCH=main ~/followit/deploy.sh` after the final merge.
+4. Run `bash ~/followit/deploy.sh engine` to integrate the reviewed `origin/p2` engine with the platform. After merging the platform, use `BRANCH=main bash ~/followit/deploy.sh engine`; set `ENGINE_REF` to a reviewed commit when pinning a release. `bash ~/followit/deploy.sh` starts only the platform and stops an existing worker.
+
+Deployment exports an isolated snapshot under `~/.local/share/followit/releases` and preserves the operator's checkout and uncommitted files. It validates Compose and builds images before replacing containers, waits for the app's database-backed health check, then checks the worker's authenticated API access. Failed readiness exits nonzero and requires inspecting `docker compose --project-name followit logs` from the printed release folder; old snapshots are retained for inspection. The worker uses `engine/Dockerfile`, receives only model/lab settings, and keeps its journal in the `followit_worker_state` Docker volume across releases. Internal HTTP is explicitly limited to the Compose service `http://app:8000`. The app build excludes credentials, local state and raw human recordings.
+
+Only Caddy exposes public ports. Port 8000 binds to VM localhost for diagnostics; use HTTPS for phones and the dashboard. Retrieve `LAB_KEY` privately from the VM's `.env` when connecting the lab. Container build and live Linode readiness must be verified on a Docker host before presenting the deployment as complete.
 
 ### Managed Postgres
 1. In Cloud Manager (cloud.linode.com), go to **Databases → Create Database Cluster**.
@@ -98,7 +102,7 @@ Show it at `/lab?replay=1`, which displays the REPLAY banner. The Approve button
 
 ## Known limits
 - Rate limits and the event stream live in memory, so the app runs as one uvicorn worker on one VM.
-- The client IP comes from the first `X-Forwarded-For` hop set by Caddy. Port 8000 is also exposed as an HTTP fallback, and clients there can spoof that header. Close it once HTTPS is up.
+- The client IP comes from the first `X-Forwarded-For` hop set by Caddy. Port 8000 is bound to VM localhost; public requests must pass through Caddy.
 - The proof-of-work uses `crypto.subtle`, which only exists on HTTPS or localhost. Phones need the HTTPS URL.
 - The scorer's feature bands start from motor-control literature and need recalibrating from the collected human traces. The gate is only as good as that sample (count by device in `/healthz`).
 - "Non-dominant hand" stands in for less precise movement. It is not a model of disability, and the gate's device groups are coarse.

@@ -78,6 +78,9 @@ export function gateSummaryLines(g) {
     const h = g.humans_rejected[dev];
     lines.push(`Humans rejected, ${dev}: ${countText(h.candidate, h.total)} (baseline ${h.baseline})`);
   }
+  for (const dev of DEVICE_ORDER.filter((d) => !g.humans_rejected?.[d]?.total)) {
+    lines.push(`${dev}: untested — no human evidence`);
+  }
   lines.push(`Gate verdict: ${verdictLabel(g.verdict)}`);
   for (const r of g.reasons || []) lines.push(`Reason: ${r}`);
   return lines;
@@ -142,8 +145,9 @@ function boot() {
 
   function setConn(on) {
     const c = $("conn");
-    c.textContent = on ? "● live" : "○ reconnecting…";
+    c.textContent = on ? (replay ? "● replay connected" : "● connected") : "○ disconnected";
     c.className = "badge " + (on ? "conn-on" : "conn-off");
+    for (const id of ["btn-red", "btn-blue", "btn-reset"]) $(id).disabled = !on || replay;
   }
 
   async function api(method, path, body) {
@@ -167,6 +171,7 @@ function boot() {
   // ---- log
   const log = $("log");
   function addLine({ cls, text }) {
+    log.querySelector('.empty-state')?.remove();
     const stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
     const div = document.createElement("div");
     div.className = "line " + (cls || "");
@@ -178,6 +183,10 @@ function boot() {
 
   // ---- comparison
   function renderCmp() {
+    $("metric-variant").textContent = state.activeId || "—";
+    const latest = state.gates.at(-1)?.forgeries_passed;
+    $("metric-forgeries").textContent = latest ? `${latest.candidate} / ${latest.total}` : "—";
+    $("metric-baseline").textContent = latest ? `Baseline: ${latest.baseline} / ${latest.total}` : "Run a gate to compare";
     const rows = buildRows(state.variants, state.gates, state.activeId);
     const root = $("cmp");
     root.textContent = "";
@@ -235,6 +244,11 @@ function boot() {
     dec.prepend(card);
     const entry = { ok, no, out, decided: false };
     state.approvals.set(d.approval_id, entry);
+    if (replay) {
+      ok.disabled = no.disabled = true;
+      out.textContent = "Recorded decision · controls disabled";
+      return;
+    }
     const decide = async (approve) => {
       ok.disabled = no.disabled = true; entry.decided = true;
       out.textContent = "Sending…"; out.className = "outcome";
@@ -273,7 +287,10 @@ function boot() {
     if (state.es) state.es.close();
     const es = new EventSource("/v1/lab/stream?key=" + encodeURIComponent(state.key));
     state.es = es;
-    es.onopen = () => { log.textContent = ""; setConn(true); };
+    es.onopen = () => {
+      log.innerHTML = '<p class="empty-state">Ready for the next experiment.<br><span>Run an agent to watch its decisions unfold.</span></p>';
+      setConn(true);
+    };
     es.onmessage = (m) => { try { onEvent(JSON.parse(m.data)); } catch (e) { console.error("bad event", e); } };
     es.onerror = async () => {
       setConn(false);
@@ -287,7 +304,7 @@ function boot() {
   // ---- buttons
   async function run(kind) {
     toast("");
-    try { await api("POST", "/v1/lab/runs", { kind }); toast(""); }
+    try { await api("POST", "/v1/lab/runs", { kind }); toast(`${kind === "red" ? "Red" : "Blue"} queued. The worker will pick it up.`); }
     catch (e) { toast(String(e.message || e)); }
   }
   $("btn-red").addEventListener("click", () => run("red"));
@@ -298,7 +315,13 @@ function boot() {
     catch (e) { toast(String(e.message || e)); }
   });
 
-  fetch("/healthz").then((r) => r.json()).then((h) => { if (h && h.engine === "stubs") $("stub-badge").hidden = false; }).catch(() => {});
+  fetch("/healthz").then((r) => r.json()).then((h) => {
+    if (h && h.engine === "stubs") $("stub-badge").hidden = false;
+    if (h?.human_traces) {
+      $("metric-humans").textContent = h.human_traces.total ?? "—";
+      $("metric-devices").textContent = DEVICE_ORDER.map((d) => `${d}: ${h.human_traces[d] || "untested"}`).join(" · ");
+    }
+  }).catch(() => {});
 
   function start() {
     $("keyprompt").hidden = true;

@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS variants (
 CREATE TABLE IF NOT EXISTS approvals (
   id text PRIMARY KEY, interrupt_id text, variant_id text NOT NULL, gate jsonb,
   status text NOT NULL DEFAULT 'pending', decided_at timestamptz);
+-- Legacy approvals have no snapshot and cannot activate; require a fresh review.
+ALTER TABLE approvals ADD COLUMN IF NOT EXISTS evidence_fingerprint text;
+ALTER TABLE approvals ADD COLUMN IF NOT EXISTS consumed_at timestamptz;
 
 CREATE TABLE IF NOT EXISTS gate_decisions (
   id text PRIMARY KEY, candidate text NOT NULL, baseline text NOT NULL, result jsonb NOT NULL,

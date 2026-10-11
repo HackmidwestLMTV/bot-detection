@@ -52,6 +52,8 @@ const S = {
   gen: 0,            // bumps on every new flow; stale async results check it and bail
   abort: null,       // AbortController for the running comet
   worker: null,      // running PoW worker
+  cancelWorker: null, // settles the pending solve when a flow is cancelled
+  challengeActive: false, // includes fetching and submitting, before/after comet input
   token: null,       // kept in memory (also after use) for the "reuse token" demo
   ringMax: 0,
   thanks: 0,
@@ -78,7 +80,15 @@ const hideRetry = () => { el.retry.hidden = true; el.retry.onclick = null; };
 function stopEverything() {
   S.gen++;
   S.abort?.abort(); S.abort = null;
-  S.worker?.terminate(); S.worker = null;
+  S.cancelWorker?.();
+  S.challengeActive = false;
+  S.token = null;
+  el.reserve.disabled = true;
+  el.reserve.hidden = false;
+  el.reserveMsg.hidden = true;
+  el.verifyAgain.hidden = true;
+  el.reuse.hidden = true;
+  el.confirm.hidden = true;
 }
 
 function setPassed(token, msg) {
@@ -107,8 +117,8 @@ if (TESTER) {
   el.tester.addEventListener('submit', e => e.preventDefault());
   el.tester.addEventListener('change', () => {
     // Nothing is fetched or sent until consent is ticked and a device is picked.
-    if (testerReady() && !S.abort && !S.worker && el.reserve.disabled && el.retry.hidden) startChallenge();
-    else if (!testerReady() && S.abort) waitForTester();
+    if (testerReady() && !S.challengeActive && !S.worker && el.reserve.disabled && el.retry.hidden) startChallenge();
+    else if (!testerReady() && S.challengeActive) waitForTester();
   });
 }
 function waitForTester() {
@@ -127,6 +137,7 @@ async function startChallenge() {
   el.skip.hidden = false;
   if (REDUCED) return startPow('reduced');
   if (TESTER && !testerReady()) return waitForTester();
+  S.challengeActive = true;
 
   say('');
   overlay('Loading…');
@@ -158,7 +169,13 @@ async function startChallenge() {
   }
   if (gen !== S.gen) return;
   S.abort = null;
-  await submitAttempt(ch, run, gen);
+  // Consent/device may have changed while the challenge was loading or running.
+  if (TESTER && !testerReady()) return waitForTester();
+  try {
+    await submitAttempt(ch, run, gen);
+  } finally {
+    if (gen === S.gen) S.challengeActive = false;
+  }
 }
 
 function normPointer(t) { return t === 'touch' || t === 'pen' ? t : 'mouse'; }
@@ -225,8 +242,20 @@ function solveInWorker(nonce, bits) {
   return new Promise((resolve, reject) => {
     const w = new Worker('/static/pow-worker.js');
     S.worker = w;
-    w.onmessage = ({ data }) => { w.terminate(); if (S.worker === w) S.worker = null; resolve(data.counter); };
-    w.onerror = e => { w.terminate(); if (S.worker === w) S.worker = null; reject(e); };
+    const cleanup = () => {
+      w.onmessage = w.onerror = w.onmessageerror = null;
+      w.terminate();
+      if (S.worker === w) { S.worker = null; S.cancelWorker = null; }
+    };
+    S.cancelWorker = () => { cleanup(); reject(new DOMException('aborted', 'AbortError')); };
+    w.onmessage = ({ data }) => {
+      cleanup();
+      if (!Number.isSafeInteger(data?.counter) || data.counter < 0) reject(new Error('Invalid proof of work'));
+      else resolve(data.counter);
+    };
+    w.onerror = w.onmessageerror = e => { cleanup(); reject(e); };
+    try { w.postMessage({ nonce, bits }); }
+    catch (error) { cleanup(); reject(error); }
   });
 }
 
