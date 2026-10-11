@@ -142,6 +142,22 @@ def test_human_test_without_s3_stores_no_trail(client):
         assert row["trail_key"] is None
 
 
+def test_human_test_requires_a_real_device(client):
+    """engine.gate() raises on a human_test row with a bad device, and /v1/lab/reset
+    keeps human traces, so such a row would break the gate permanently."""
+    for bad in (None, "phone", "", "Mouse"):
+        cid = challenge(client, sid())
+        t = trail(cohort="human_test", tester={"consent": True})
+        t["device"] = bad
+        r = client.post(f"/v1/challenges/{cid}/attempt", json=t)
+        assert r.status_code == 422, f"device={bad!r} gave {r.status_code}"
+    cid = challenge(client, sid())
+    t = trail(cohort="human_test", tester={"consent": True})
+    del t["device"]
+    assert client.post(f"/v1/challenges/{cid}/attempt", json=t).status_code == 422
+    assert db.one("SELECT 1 FROM attempts WHERE cohort='human_test' AND device IS NULL") is None
+
+
 def test_short_trail_422(client):
     cid = challenge(client, sid())
     r = client.post(f"/v1/challenges/{cid}/attempt", json=trail(ms=500))

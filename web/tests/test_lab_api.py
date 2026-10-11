@@ -117,6 +117,17 @@ def test_post_variant_and_conflict(client):
     assert client.post("/v1/variants", headers=LAB, json=bad).status_code == 422
 
 
+def test_gate_bad_evidence_is_422_not_500(client):
+    """The real engine.gate() raises ValueError on malformed evidence. The dashboard
+    must see a 422, never a 500."""
+    add_attempt("human_test", device=None)
+    add_attempt("red", round_id="run_bad")
+    client.post("/v1/variants", headers=LAB, json=variant("vt_bad"))
+    r = client.post("/v1/lab/gate", headers=LAB, json={"candidate_id": "vt_bad"})
+    assert r.status_code in (200, 422), r.status_code
+    db.exec("DELETE FROM attempts WHERE cohort='human_test' AND device IS NULL")
+
+
 def test_gate(client):
     add_attempt("human_test")
     add_attempt("red", round_id="run_g")

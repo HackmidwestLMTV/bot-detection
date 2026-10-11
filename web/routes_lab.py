@@ -173,7 +173,12 @@ def _run_gate(candidate_id: str) -> dict:
               for r in db.all("SELECT device, features FROM attempts WHERE cohort='human_test'")]
     forged = [{"round_id": r["round_id"], "features": r["features"]}
               for r in db.all("SELECT round_id, features FROM attempts WHERE cohort='red'")]
-    result = engine_adapter.gate(row["config"], baseline, humans, forged)
+    try:
+        result = engine_adapter.gate(row["config"], baseline, humans, forged)
+    except ValueError as e:
+        # engine.gate() raises on malformed evidence or variants. Never let that
+        # become a 500 on the lab dashboard mid-demo.
+        raise HTTPException(422, f"gate rejected the evidence: {e}") from e
     db.exec("INSERT INTO gate_decisions(id, candidate, baseline, result) VALUES (%s, %s, %s, %s)",
             new_id("gd"), candidate_id, baseline["id"], db.Json(result))
     return result
