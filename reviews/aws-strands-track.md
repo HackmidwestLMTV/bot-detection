@@ -1,13 +1,22 @@
 # AWS / Strands Agents track — what is real, what is only configured
 
-Audit date 2026-10-11, repo at `3517fef` (branch `p1-platform`).
+Audit date 2026-10-11, repo originally reviewed at `3517fef` (branch `p1-platform`).
 Environment: Python 3.14.7 venv at `.venv`, `strands-agents==1.59.0`, `boto3==1.43.111`,
 `botocore==1.43.111`, `openai==2.54.0`, `pydantic==2.14.0`. `pip check`: no broken requirements.
 
+**Update, same day:** this audit's own [Defect 1](#defect-1-the-deployed-worker-allowlist-was-fixed)
+diff was applied for real in commit `8088b79` ("Let the deployed worker actually reach
+Bedrock; prove the Strands path"), which also committed this file and
+`engine/tests/test_bedrock_provider.py`. HEAD is now `8088b79`. The section below is left
+in its original "defect found" form and then marked fixed, so the record of what was wrong
+and why stays intact — re-review confirmed the committed `compose.yaml` matches.
+
 **Headline in one line:** Strands Agents is the genuine agent framework for this product —
 not a wrapper, not a stub — and the AWS Bedrock model provider is wired correctly and now
-proven reachable offline, but **it has never once run against real AWS**, and the deployed
-worker cannot currently reach it at all (see [Defect 1](#defect-1-the-deployed-worker-cannot-be-switched-to-bedrock)).
+proven reachable offline. The deployed worker's environment allowlist was blocking every
+Bedrock variable and has since been fixed ([Defect 1](#defect-1-the-deployed-worker-allowlist-was-fixed)),
+but **it has never once run against real AWS** — that remains true regardless of the fix,
+because no AWS credentials exist anywhere in this environment.
 
 ---
 
@@ -71,7 +80,7 @@ human `approved` record (`blue.py:200–213`).
 `engine/agents/schemas.py:8` defines `RoundReport` as a Pydantic model with
 `extra="forbid"` and a `passed <= attempts` validator. Strands registers it as a dynamic
 tool literally named `RoundReport` (which is why every hook special-cases that name — e.g.
-`red.py:33`), and the round fails if the SDK does not hand back a validated instance
+`red.py:34`), and the round fails if the SDK does not hand back a validated instance
 (`red.py:123`, `blue.py:220`).
 
 Critically, **the model's numbers are not trusted**: `red.py:126–130` keeps only the model's
@@ -223,10 +232,11 @@ CloudTrail, since the harness deliberately does not log provider response bodies
 
 Ordered by how likely it is to ruin a demo.
 
-**R1 — The deployed worker ignores every Bedrock variable.** Not a risk; a certainty.
-See [Defect 1](#defect-1-the-deployed-worker-cannot-be-switched-to-bedrock). Setting
-`USE_BEDROCK=1` in the VM's `.env` changes nothing and raises no error: the container keeps
-calling Akamai. Fix before claiming the AWS track end-to-end.
+**R1 — (fixed) The deployed worker used to ignore every Bedrock variable.** It no longer
+does — see [Defect 1](#defect-1-the-deployed-worker-allowlist-was-fixed). Before the fix,
+setting `USE_BEDROCK=1` in the VM's `.env` changed nothing and raised no error: the
+container kept calling Akamai regardless. That config pipe is now open; nobody has yet put
+real AWS values through it on the deployed VM.
 
 **R2 — Throttling is a hard round failure, by design.** Bedrock on-demand quotas are
 per-account, per-model, per-region, and a tool loop is bursty. Both retry layers are
@@ -306,40 +316,44 @@ Bedrock bills per token against a real account. Nothing in the repo caps spend.
 
 ## 5. Defects in files I do not own
 
-Reported, not patched. Exact diffs below; `engine/` belongs to Person 2 and the root compose
-file to Person 1.
+Exact diffs below; `engine/` belongs to Person 2 and the root compose file to Person 1.
+Defect 1 was found, then fixed for real in the same commit that shipped this document —
+recorded here as found-then-fixed rather than deleted, so the reasoning survives. Defects 2
+and 3 are still open; reported, not patched.
 
-### Defect 1 — the deployed worker cannot be switched to Bedrock
+### Defect 1 — the deployed worker allowlist was fixed
 
-`compose.yaml:21–28` gives the `worker` service an explicit `environment:` allowlist and
-**no** `env_file: .env`. The allowlist contains only `AKAMAI_BASE_URL`, `AKAMAI_API_KEY`,
-`MODEL_ID`, so `USE_BEDROCK`, `BEDROCK_MODEL_ID`, `AWS_REGION` and
-`AWS_BEARER_TOKEN_BEDROCK` never enter the container. The image also has no `.env` to fall
-back on (`engine/Dockerfile` copies only `engine/` and two `contracts/` paths), so
-`worker.py:101`'s `load_dotenv` finds nothing. Result: setting `USE_BEDROCK=1` on the VM is
-**silently ignored** — no error, no log line, Akamai keeps serving. `deploy.sh:47` already
-symlinks `.env` into the release dir, so Compose can interpolate these; only the allowlist
-is missing.
+**Status: fixed in commit `8088b79`, re-verified against the current `compose.yaml`.**
 
-```diff
---- a/compose.yaml
-+++ b/compose.yaml
-@@ -25,4 +25,9 @@ services:
-       AKAMAI_BASE_URL: ${AKAMAI_BASE_URL:-https://ws.akamai-workshops.com/v1}
-       AKAMAI_API_KEY: ${AKAMAI_API_KEY:-}
-       MODEL_ID: ${MODEL_ID:-hackathon-chat}
-+      # Explicit AWS Bedrock fallback; the worker never switches provider on its own.
-+      USE_BEDROCK: ${USE_BEDROCK:-0}
-+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-}
-+      AWS_REGION: ${AWS_REGION:-us-east-1}
-+      AWS_BEARER_TOKEN_BEDROCK: ${AWS_BEARER_TOKEN_BEDROCK:-}
-       WORKER_STATE_PATH: /srv/engine/.state/worker.sqlite3
+As originally found: `compose.yaml:21–28` gave the `worker` service an explicit
+`environment:` allowlist and **no** `env_file: .env`. The allowlist contained only
+`AKAMAI_BASE_URL`, `AKAMAI_API_KEY`, `MODEL_ID`, so `USE_BEDROCK`, `BEDROCK_MODEL_ID`,
+`AWS_REGION` and `AWS_BEARER_TOKEN_BEDROCK` never entered the container, and setting
+`USE_BEDROCK=1` on the VM was **silently ignored** — no error, no log line, Akamai kept
+serving. The AWS provider could not have been demonstrated on the deployed system even with
+credentials in hand.
+
+The fix, now in `compose.yaml:28–38`, adds exactly those four variables plus
+`MODEL_MIN_INTERVAL_S` (worth having explicitly here: Bedrock quotas are per-account while
+that setting only paces one process, and both retry layers are off, so under-pacing becomes
+a hard round failure rather than a slowdown — see R2 below):
+
+```yaml
+      USE_BEDROCK: ${USE_BEDROCK:-0}
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_BEARER_TOKEN_BEDROCK: ${AWS_BEARER_TOKEN_BEDROCK:-}
+      MODEL_MIN_INTERVAL_S: ${MODEL_MIN_INTERVAL_S:-3}
 ```
 
-(SigV4 instead of a bearer token additionally needs `AWS_ACCESS_KEY_ID`,
-`AWS_SECRET_ACCESS_KEY` and optionally `AWS_SESSION_TOKEN` added the same way, or a mounted
-`~/.aws`. The bearer token is the smaller change and is the one `agents.env.example:13–14`
-already recommends.)
+This closes the config pipe end to end: `deploy.sh:47` already symlinks `.env` into the
+release dir, Compose now interpolates the five Bedrock variables from it into the worker
+container, and `.env.example` documents the switch. **What this does not do:** it does not
+add `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` for a SigV4 credential
+chain — only the bearer-token path is wired, which matches `agents.env.example`'s own
+recommendation and is the smaller change, but a deployment that wants an instance role or
+profile instead of a bearer token needs those three added the same way. And this is still
+**configuration only** — nobody has set real values and run it; see Section 2.
 
 ### Defect 2 — `engine/compose.worker.yaml` is dead and would not start a worker
 
@@ -400,7 +414,7 @@ these values are secret (`ModelSettings` keeps `api_key` out of its repr by cons
 | Built on the Strands Agents SDK | **Proven.** `Agent`, `@tool`, 4 hook event types, `cancel_tool`, `interrupt`, `end_turn`, typed structured output, typed exceptions — all load-bearing, all cited above, all covered by 114 passing engine tests. |
 | Strands' AWS Bedrock model provider is wired and reachable | **Proven offline.** `make_model` builds a real `strands.models.BedrockModel` on a `bedrock-runtime` client with the configured model id, region, timeouts and single-attempt retry policy; a full agent loop — tool call, denial, forced structured output, throttling — runs against a stubbed Converse transport in `engine/tests/test_bedrock_provider.py`. |
 | Red and Blue have run on Amazon Bedrock | **No. Never. Not once.** No AWS credentials exist in this environment. Every live round to date used the Akamai OpenAI-compatible endpoint. |
-| Bedrock can be switched on in the deployed system today | **No** — `compose.yaml` drops the variables ([Defect 1](#defect-1-the-deployed-worker-cannot-be-switched-to-bedrock)). Fixable in five lines. |
+| Bedrock can be switched on in the deployed system today | **Yes, the config pipe is open** — `compose.yaml`'s worker allowlist now passes `USE_BEDROCK`, `BEDROCK_MODEL_ID`, `AWS_REGION`, `AWS_BEARER_TOKEN_BEDROCK`, `MODEL_MIN_INTERVAL_S` into the container ([Defect 1](#defect-1-the-deployed-worker-allowlist-was-fixed), fixed in `8088b79`). Nobody has put real AWS values through it and redeployed, so this is "can be," not "has been." |
 
 The honest sentence to put in the submission: *"The agents are Strands Agents; the AWS
 Bedrock provider is implemented through Strands' `BedrockModel` and covered by tests that
