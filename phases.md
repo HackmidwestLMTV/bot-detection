@@ -20,11 +20,16 @@ fill time. Reuse the team's existing infrastructure after confirming its endpoin
 | Website and lab | Shared desktop/mobile design; ticket, fallback, single-use token, review/approval controls implemented | Real phone checkout over HTTPS |
 | Engine | Deterministic paths, five features, forger, residual transplantation, fixed per-device gate | Real calibration for the new smooth path |
 | Red / Blue | Akamai model integration and approval cycle previously exercised in a disposable local lab | A bounded cycle against the deployed integrated API |
-| Integration | Current local suite: 220 Python tests, two expected skips; 13 frontend tests passed. Previous CI verified PostgreSQL18 and both Docker builds | Container CI for this update |
+| Integration | 220 Python tests, two expected skips; 13 frontend tests passed. Current CI also passed PostgreSQL18, Caddy/Compose and both Docker builds | Cloud runtime verification |
 | Smooth comet | New versioned `smooth_v2`; continuous seeded curves, no kicks or hard clipping; Python/JS agreement | Luc's feedback on actual mouse/trackpad/touch comfort |
 | Recordings | Nine consented legacy `v1` traces: eight mouse, one trackpad | New smooth-path recordings; do not count old traces as new calibration |
 | Cloud | Scripts and containers target Akamai/Linode; model API already used | Team VM/app URL/IP, managed database and storage status are unconfirmed |
-| PRs | #1 merged; #2 approved; #3 under integrated review | Finish current checks, merge #3 then #2, deploy one reviewed revision |
+| PRs | #1, #3 and #2 merged; no open PRs at the completion check. Integrated main commit `b1c683d` | Deploy the reviewed revision |
+
+Passing demo-update CI: https://github.com/HackmidwestLMTV/bot-detection/actions/runs/38106215722.
+Luc initially could not reach the LAN recorder. With his explicit approval, a
+temporary Windows Firewall rule now permits only local-subnet Wi-Fi traffic to
+recorder TCP8004. The phone retry is pending; Wi-Fi device isolation remains possible.
 
 ## Phase A — consolidate the demo (P2, with P1 review)
 
@@ -66,6 +71,10 @@ The current Wi-Fi recorder address is:
 - If it cannot connect, the Wi-Fi may isolate devices or Windows Firewall may block
   inbound traffic. Try a trusted shared hotspot; do not disable the firewall globally.
 - This address can change when Wi-Fi changes. Run `ipconfig` and use the Wi-Fi IPv4.
+
+The temporary local rule is named `FollowItRecorder8004`. Remove it after testing
+from an administrator PowerShell: `Remove-NetFirewallRule -Name FollowItRecorder8004`.
+It does not open the website/lab API ports or publish anything on the Internet.
 
 Restart the recorder from the repository root:
 
