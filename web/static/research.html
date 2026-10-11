@@ -9,7 +9,9 @@ main{max-width:880px;margin:auto;padding:30px 20px}
 a{color:var(--accent)}
 h1{line-height:1.05;font-size:clamp(34px,4.4vw,46px);letter-spacing:-.045em;font-weight:800;font-variation-settings:'wdth' 90}
 h2{font-size:21px;letter-spacing:-.03em;font-weight:700}
+h3{font-size:14px;letter-spacing:-.01em;font-weight:700;margin:18px 0 4px}
 .card{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--ink);border-radius:4px;padding:24px;margin:20px 0;box-shadow:var(--shadow)}
+.card.live{border-top-color:var(--accent)}
 .badge{display:inline-block;border:1px solid var(--line);padding:5px 11px;border-radius:0;font:500 10px/1.4 var(--mono);letter-spacing:.1em;text-transform:uppercase}
 label{display:block;font-weight:650;margin:16px 0 6px}
 input,select,button{font:inherit;border:1px solid var(--line);border-radius:4px;padding:11px;max-width:100%;min-height:44px}
@@ -25,25 +27,96 @@ th{font:500 11px/1.4 var(--mono);letter-spacing:.08em;text-transform:uppercase;c
 #invite-url{overflow-wrap:anywhere;font-family:var(--mono)}
 #status{min-height:1.5em}
 .error{color:var(--red)}
+/* ---- collection progress: the one number an operator checks between volunteers ---- */
+.tally{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:4px 0 2px}
+.tally b{font:800 clamp(44px,9vw,62px)/1 var(--font);letter-spacing:-.05em;font-variation-settings:'wdth' 88}
+.tally span{font:500 11px/1.4 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+#need{font-size:17px;font-weight:650;margin:6px 0 2px}
+#landed{color:var(--ok);font-weight:650;min-height:1.4em;font-family:var(--mono);font-size:13px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 6px;padding:0;list-style:none}
+.chips li{flex:1 1 150px;border:1px solid var(--line);border-left:3px solid var(--line);padding:10px 12px;background:#fff}
+.chips li.missing{border-left-color:var(--red)}
+.chips li.done{border-left-color:var(--ok)}
+.chips b{display:block;font:500 11px/1.6 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.chips i{font-style:normal;font:800 26px/1.1 var(--font);letter-spacing:-.03em}
+.chips em{font-style:normal;display:block;font-size:12px;color:var(--muted)}
+.quick{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.quick button{flex:1 1 170px;margin:0;background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.cmd{display:flex;gap:8px;align-items:stretch;flex-wrap:wrap}
+.cmd code{flex:1 1 320px;font:400 12px/1.6 var(--mono);background:var(--bg);border:1px solid var(--line);padding:10px;overflow-wrap:anywhere}
+.cmd button{margin:0;white-space:nowrap}
+.say{border-left:3px solid var(--accent);padding:2px 0 2px 14px;margin:12px 0}
+.say p{margin:0 0 8px}
+.say q{font-style:normal;font-weight:650}
+details{margin-top:18px;border-top:1px solid var(--line);padding-top:10px}
+summary{cursor:pointer;font-weight:650}
+.row{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+.row>*{flex:1 1 180px}
+.inline{display:flex;gap:10px;align-items:flex-start;font-weight:400;margin:14px 0 0}
+.inline input{width:20px;height:20px;min-height:20px;flex:none;margin-top:2px;accent-color:var(--accent)}
 </style></head><body><main>
 <a href="/">← Ticket demo</a> · <a href="/?tester=1">Calibration tester</a>
 <h1>Collect real movement.</h1><span class="badge">Models: shadow only</span>
 <p>Invite people to record with a real mouse, trackpad, or phone. Checkout continues using the active deterministic policy. New model outputs cannot approve or reject visitors.</p>
+
+<section class="card live" aria-labelledby="progress-title">
+  <div style="display:flex;gap:12px;align-items:baseline;flex-wrap:wrap">
+    <h2 id="progress-title">Progress</h2><small id="freshness" style="margin-left:auto"></small>
+  </div>
+  <div class="tally"><b id="total">–</b><span>of 10 consented recordings saved here<br>on <span id="versions">this build</span></span></div>
+  <p id="need">Unlock with your operator key to see what is still missing.</p>
+  <p id="landed" role="status" aria-live="polite"></p>
+  <ul class="chips" id="chips"></ul>
+  <p id="model-status"></p>
+  <small>This counts recordings this app has saved with training consent, for future model work — a separate dataset from Phase C’s calibration corpus below, not proof of accuracy either way. Counts are for the current path and display version only; raw recordings and exports expire 72 hours after collection.</small>
+  <h3>Tester attempts reaching this server</h3>
+  <p id="attempts">Checking…</p>
+  <small>Scored attempts, not saved recordings. Use it to confirm phones are reaching this app at all; a number here with no recordings above means consent or enrollment did not complete.</small>
+  <h3>Local recorder traces — this is Phase C’s checkpoint</h3>
+  <p><small>Recordings saved by <code>scripts/collect.sh</code>’s phone/LAN recorder are files on the collecting machine, not rows in this app, and <span style="font-family:var(--mono)">engine.calibrate</span> reads only these. The progress tally above does not count toward Phase C. Count them in a terminal there:</small></p>
+  <div class="cmd"><code id="count-cmd">python3 -c "import collections,glob,json;t=[json.load(open(f)) for f in glob.glob('contracts/fixtures/human_traces/*.json')];c=collections.Counter(x['device'] for x in t if x.get('path_version')=='smooth_v2');print(sum(c.values()),dict(c))"</code><button class="secondary" id="copy-count">Copy</button></div>
+</section>
+
 <section class="card"><h2>Operator access</h2>
 <label for="operator-key">Operator key</label><input id="operator-key" type="password" autocomplete="off" spellcheck="false">
-<small>Use the existing lab key. It stays in this page’s memory and is sent only to this app in an authentication header. Never share it with participants.</small>
-<button id="refresh">Check collection status</button><button class="secondary" id="lock">Clear key and invitation</button>
+<small>Use the existing lab key. It is sent only to this app in an authentication header. Never share it with participants.</small>
+<label class="inline" for="remember"><input type="checkbox" id="remember"><span>Keep it in this browser tab while I collect, so a reload does not interrupt the session. Cleared when the tab closes or when you clear below. Leave off on a shared or projected screen.</span></label>
+<button id="refresh">Unlock and watch progress</button><button class="secondary" id="lock">Clear key and invitation</button>
 <p id="status" role="status" aria-live="polite"></p>
-<div id="coverage" hidden><p id="model-status"></p><table><thead><tr><th>Device</th><th>Recordings</th><th>Evidence</th></tr></thead><tbody id="counts"></tbody></table><p>Private storage · 72-hour raw recording retention. Counts are collection coverage, not validated model performance.</p></div>
 </section>
-<section class="card"><h2>Create a participant invitation</h2>
-<p>Use a different random ID for each person. Reuse that person’s ID when issuing another invitation for a different device or browser. Do not enter names or email addresses.</p>
-<label for="participant">Pseudonymous participant ID</label><input id="participant" pattern="[A-Za-z0-9_-]{8,100}" maxlength="100" autocomplete="off">
-<button class="secondary" id="new-person">New person</button>
-<label for="device">Actual device</label><select id="device"><option value="mouse">Mouse</option><option value="trackpad">Trackpad</option><option value="touch">Phone / real touch</option></select>
-<p>Each invitation expires in 24 hours, allows up to 30 challenges, and binds to the first browser session that starts a consented challenge. Ask for 3–5 natural attempts, including misses. Do not use automation.</p>
-<button id="create">Create invitation</button>
-<div id="invitation" hidden><h2>Ready for this participant</h2><p id="invite-person"></p><img id="qr" alt="Scan to open this participant’s tester invitation"><p><a id="invite-url" target="_blank" rel="noopener noreferrer"></a></p><button class="secondary" id="copy">Copy invitation link</button><p>Send only this link or show this QR code. Opening it preselects the device; the participant must give consent before collection begins. Generate a new invitation for each device/browser.</p></div>
+
+<section class="card"><h2>Hand out an invitation</h2>
+<p>One tap per volunteer. Each button issues a fresh pseudonymous ID for the device you pick, so nothing has to be typed between people.</p>
+<div class="quick">
+  <button id="q-mouse" data-device="mouse">Invite: mouse</button>
+  <button id="q-trackpad" data-device="trackpad">Invite: trackpad</button>
+  <button id="q-touch" data-device="touch">Invite: phone / touch</button>
+</div>
+<small>Each invitation expires in 24 hours, allows up to 30 challenges, and binds to the first browser session that starts a consented challenge — so one person can record several attempts in a row from the same link without re-entering anything. Issue a new invitation for a different device or browser.</small>
+
+<div id="invitation" hidden>
+  <h3 id="invite-person" style="font-size:17px"></h3>
+  <img id="qr" alt="Scan to open this participant’s tester invitation">
+  <p><a id="invite-url" target="_blank" rel="noopener noreferrer"></a></p>
+  <button class="secondary" id="copy">Copy invitation link</button>
+  <div class="say">
+    <p><q id="say-open">Can I borrow two minutes? We need real human movement to calibrate this, and right now we only have synthetic data.</q></p>
+    <p><q id="say-device">Scan this, follow the ball with your finger for three seconds.</q></p>
+    <p><q>The page asks you to tick two boxes, top to bottom: one to allow the recording for training movement models, one to share it for calibration. Both are yours to refuse — the recording is only kept if you tick them, and it is deleted after 72 hours.</q></p>
+    <p><q>Scroll down past the ticket artwork to the Tester mode panel — that is where the boxes are. Three or four goes is plenty, and a miss is useful too.</q></p>
+    <p><q>Before you hand it back: the line under your score should say the recording was saved. If it doesn’t, tell me.</q></p>
+  </div>
+  <small>Send only this link or show this QR code. Opening it preselects the device and fills in the code; it grants nothing. You cannot consent on someone’s behalf — they tick both boxes themselves on their own device. If they reload the page the code is lost, so send the link again rather than letting them continue without it.</small>
+</div>
+
+<details><summary>Same person again, or a specific ID</summary>
+<p>Reuse a person’s ID when issuing another invitation for a different device or browser. Do not enter names or email addresses.</p>
+<div class="row">
+  <div><label for="participant">Pseudonymous participant ID</label><input id="participant" pattern="[A-Za-z0-9_-]{8,100}" maxlength="100" autocomplete="off"></div>
+  <div><label for="device">Actual device</label><select id="device"><option value="mouse">Mouse</option><option value="trackpad">Trackpad</option><option value="touch">Phone / real touch</option></select></div>
+</div>
+<button class="secondary" id="new-person">New random ID</button><button id="create">Create invitation</button>
+</details>
 </section>
-<p>RF, CNN, and LSTM candidates need genuine consented data, participant-separated evaluation, and an independent review before any future activation. Missing device coverage stays “untested.”</p>
-</main><script type="module" src="/static/research.js?v=collection_v1"></script></body></html>
+<p>RF, CNN, and LSTM candidates need genuine consented data, participant-separated evaluation, and an independent review before any future activation. Missing device coverage stays “untested.” Automated or scripted input is never human evidence.</p>
+</main><script type="module" src="/static/research.js?v=collection_v2"></script></body></html>
