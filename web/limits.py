@@ -2,6 +2,7 @@
 
 Thread-safe: route handlers are sync and run in a threadpool.
 """
+import ipaddress
 import threading
 import time
 from collections import defaultdict, deque
@@ -16,14 +17,43 @@ _hits: dict[str, deque] = defaultdict(deque)
 _last_sweep = 0.0
 
 
+# Caddy reaches the app over the compose network, so our proxy is always on one of these.
+# Listed explicitly rather than using ip.is_private, which also covers the documentation
+# ranges (192.0.2/24, 198.51.100/24, 203.0.113/24) -- we do not want to trust those.
+_PROXY_NETS = tuple(ipaddress.ip_network(n) for n in (
+    "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16",
+    "::1/128", "fc00::/7", "fe80::/10",
+))
+
+
+def _trusted_peer(host: str | None) -> bool:
+    """Is the socket peer our own reverse proxy? Anything else talked to us directly."""
+    if not host:
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return any(ip in net for net in _PROXY_NETS)
+
+
 def client_ip(request: Request) -> str:
-    """First hop of X-Forwarded-For (Caddy sets it), else the socket peer."""
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        first = xff.split(",")[0].strip()
-        if first:
-            return first
-    return request.client.host if request.client else "unknown"
+    """The real client address, resistant to a spoofed X-Forwarded-For.
+
+    Caddy APPENDS the peer it saw to any X-Forwarded-For the client supplied, so a
+    client sending `X-Forwarded-For: 1.2.3.4` produces `1.2.3.4, <real client>`. Taking
+    the FIRST hop would therefore key the IP ceiling on an attacker-chosen value, and
+    rotating it defeats the limit entirely. Take the LAST hop -- the one our own proxy
+    appended -- and only when the peer is that proxy. Otherwise use the socket peer.
+    """
+    peer = request.client.host if request.client else None
+    if _trusted_peer(peer):
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            hops = [h.strip() for h in xff.split(",") if h.strip()]
+            if hops:
+                return hops[-1]
+    return peer or "unknown"
 
 
 def _prune(q: deque, now: float):

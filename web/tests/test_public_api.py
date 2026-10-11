@@ -236,11 +236,47 @@ def test_challenge_rate_limit(client):
     challenge(client, s, headers=LAB)
 
 
-def test_ip_ceiling_and_forwarded_for(client, monkeypatch):
+def test_client_ip_ignores_a_spoofed_forwarded_for():
+    """Caddy APPENDS the peer it saw to any X-Forwarded-For the client sent, so a direct
+    client sending `X-Forwarded-For: 1.2.3.4` yields `1.2.3.4, <real client>`. Keying on the
+    first hop would let a client pick its own rate-limit bucket and rotate it freely."""
+    from starlette.requests import Request
+
+    from web import limits
+
+    def req(peer, xff=None):
+        headers = [(b"x-forwarded-for", xff.encode())] if xff else []
+        return Request({"type": "http", "headers": headers,
+                        "client": (peer, 1234) if peer else None})
+
+    # Behind our own proxy: take the LAST hop, the one the proxy appended.
+    assert limits.client_ip(req("10.0.0.5", "1.2.3.4, 203.0.113.9")) == "203.0.113.9"
+    assert limits.client_ip(req("127.0.0.1", "203.0.113.9")) == "203.0.113.9"
+    # A spoofed first hop cannot choose the bucket.
+    a = limits.client_ip(req("10.0.0.5", "9.9.9.1, 203.0.113.9"))
+    b = limits.client_ip(req("10.0.0.5", "9.9.9.2, 203.0.113.9"))
+    assert a == b == "203.0.113.9"
+    # Not behind a trusted proxy: header ignored entirely.
+    assert limits.client_ip(req("198.51.100.50", "1.2.3.4")) == "198.51.100.50"
+    assert limits.client_ip(req("8.8.8.8", "1.2.3.4, 9.9.9.9")) == "8.8.8.8"
+    # Documentation ranges are NOT our proxy, even though ipaddress.is_private says so.
+    assert limits.client_ip(req("203.0.113.50", "1.2.3.4")) == "203.0.113.50"
+    # IPv6 loopback and unique-local are the proxy; public IPv6 is not.
+    assert limits.client_ip(req("::1", "203.0.113.9")) == "203.0.113.9"
+    assert limits.client_ip(req("2606:4700::1111", "1.2.3.4")) == "2606:4700::1111"
+    # Degenerate inputs fall back to the peer, never crash.
+    assert limits.client_ip(req("10.0.0.5", "  ,  ")) == "10.0.0.5"
+    assert limits.client_ip(req("not-an-ip", "1.2.3.4")) == "not-an-ip"
+    assert limits.client_ip(req(None)) == "unknown"
+
+
+def test_ip_ceiling(client, monkeypatch):
+    """TestClient's peer is not a real IP, so X-Forwarded-For is correctly distrusted and
+    every request shares one bucket. Header spoofing must not create a second bucket."""
     monkeypatch.setattr(config, "IP_PER_MIN", 3)
-    h = {"X-Forwarded-For": "203.0.113.7, 10.0.0.1"}
     for _ in range(3):
-        assert client.post("/v1/challenges", json={"session_id": sid()}, headers=h).status_code == 200
-    assert client.post("/v1/challenges", json={"session_id": sid()}, headers=h).status_code == 429
-    h2 = {"X-Forwarded-For": "203.0.113.8"}
-    assert client.post("/v1/challenges", json={"session_id": sid()}, headers=h2).status_code == 200
+        assert client.post("/v1/challenges", json={"session_id": sid()}).status_code == 200
+    assert client.post("/v1/challenges", json={"session_id": sid()}).status_code == 429
+    spoofed = {"X-Forwarded-For": "203.0.113.8"}
+    assert client.post("/v1/challenges", json={"session_id": sid()},
+                       headers=spoofed).status_code == 429
