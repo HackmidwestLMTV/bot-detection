@@ -49,9 +49,9 @@ def real_gate():
 
 def add_attempt(cohort, device="mouse", round_id=None, nondominant=False, features=None):
     aid = new_id("att")
-    db.exec("""INSERT INTO attempts(id, challenge_id, cohort, device, nondominant_hand, round_id, features, score, pass)
-               VALUES (%s, NULL, %s, %s, %s, %s, %s, 0.75, true)""",
-            aid, cohort, device, nondominant, round_id, db.Json(FEATS if features is None else features))
+    db.exec("""INSERT INTO attempts(id, challenge_id, cohort, device, nondominant_hand, round_id, features, score, pass, path_version)
+               VALUES (%s, NULL, %s, %s, %s, %s, %s, 0.75, true, %s)""",
+            aid, cohort, device, nondominant, round_id, db.Json(FEATS if features is None else features), config.PATH_VERSION)
     return aid
 
 
@@ -111,7 +111,7 @@ def test_human_features_shape(client):
     aid = add_attempt("human_test", device="trackpad", nondominant=True)
     add_attempt("organic")
     rows = client.get("/v1/lab/human-features", headers=LAB).json()
-    assert rows and all(set(r) == {"attempt_id", "device", "nondominant_hand", "features"} for r in rows)
+    assert rows and all(set(r) == {"attempt_id", "device", "nondominant_hand", "features", "path_version"} for r in rows)
     mine = next(r for r in rows if r["attempt_id"] == aid)
     assert mine["device"] == "trackpad" and mine["nondominant_hand"] is True and mine["features"] == FEATS
 
@@ -121,7 +121,7 @@ def test_forgeries_filter(client):
     b = add_attempt("red", round_id="run_fb")
     rows = client.get("/v1/lab/forgeries", headers=LAB, params={"round_id": "run_fa"}).json()
     assert [r["attempt_id"] for r in rows] == [a]
-    assert set(rows[0]) == {"attempt_id", "round_id", "features", "score", "pass"}
+    assert set(rows[0]) == {"attempt_id", "round_id", "features", "score", "pass", "path_version"}
     every = {r["attempt_id"] for r in client.get("/v1/lab/forgeries", headers=LAB).json()}
     assert {a, b} <= every
 

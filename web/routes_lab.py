@@ -21,7 +21,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from starlette.concurrency import run_in_threadpool
 
-from . import db, engine_adapter, events
+from . import config, db, engine_adapter, events
 from .common import active_variant, new_id, require_lab
 
 router = APIRouter(dependencies=[Depends(require_lab)])
@@ -53,6 +53,9 @@ class VariantIn(BaseModel):
 
     @model_validator(mode="after")
     def _shape(self):
+        if self.model_extra and "path_version" in self.model_extra:
+            if self.model_extra["path_version"] not in ("v1", "smooth_v2"):
+                raise ValueError("unknown path_version")
         names = {"lag_ms", "err_mean_px", "submoves_per_s", "jitter_px", "power_law_beta"}
         if set(self.features) != names:
             raise ValueError("features must contain exactly the five contract features")
@@ -125,12 +128,15 @@ def list_variants():
 
 @router.get("/v1/variants/active")
 def get_active_variant():
-    return active_variant()
+    return {**active_variant(), "path_version": config.PATH_VERSION}
 
 
 @router.post("/v1/variants")
 def create_variant(body: VariantIn):
     cfg = body.model_dump()
+    if cfg.get("path_version", config.PATH_VERSION) != config.PATH_VERSION:
+        raise HTTPException(422, "scoring proposals cannot change the configured challenge path_version")
+    cfg["path_version"] = config.PATH_VERSION
     n = db.exec("INSERT INTO variants(id, config, status) VALUES (%s, %s, 'candidate') ON CONFLICT (id) DO NOTHING",
                 cfg["id"], db.Json(cfg))
     if not n:
@@ -171,15 +177,16 @@ async def activate_variant(variant_id: str, run_id: str | None = Query(default=N
 
 @router.get("/v1/lab/human-features")
 def human_features():
-    return db.all("""SELECT id AS attempt_id, device, COALESCE(nondominant_hand, false) AS nondominant_hand, features
-                     FROM attempts WHERE cohort='human_test' ORDER BY created_at""")
+    return db.all("""SELECT id AS attempt_id, device, COALESCE(nondominant_hand, false) AS nondominant_hand, features, path_version
+                     FROM attempts WHERE cohort='human_test' AND path_version=%s ORDER BY created_at""", config.PATH_VERSION)
 
 
 @router.get("/v1/lab/forgeries")
 def forgeries(round_id: str | None = Query(default=None)):
-    sql = """SELECT id AS attempt_id, round_id, features, score, pass
-             FROM attempts WHERE cohort='red' AND (%s::text IS NULL OR round_id=%s::text) ORDER BY created_at"""
-    return db.all(sql, round_id, round_id)
+    sql = """SELECT id AS attempt_id, round_id, features, score, pass, path_version
+             FROM attempts WHERE cohort='red' AND path_version=%s
+             AND (%s::text IS NULL OR round_id=%s::text) ORDER BY created_at"""
+    return db.all(sql, config.PATH_VERSION, round_id, round_id)
 
 
 # ---------- gate + approvals ----------
@@ -205,9 +212,14 @@ def _evaluate(conn, candidate_id: str) -> tuple[dict, str]:
     active = conn.execute("SELECT config FROM variants WHERE status='active' ORDER BY created_at DESC LIMIT 1").fetchone()
     if not active:
         raise HTTPException(409, "no active baseline")
-    baseline = active["config"]
-    humans = conn.execute("SELECT id, device, features FROM attempts WHERE cohort='human_test' ORDER BY id").fetchall()
-    forged = conn.execute("SELECT id, round_id, features FROM attempts WHERE cohort='red' ORDER BY id").fetchall()
+    if row["config"].get("path_version", config.PATH_VERSION) != config.PATH_VERSION:
+        raise HTTPException(422, "candidate path_version differs from configured challenge path")
+    baseline = {**active["config"], "path_version": config.PATH_VERSION}
+    candidate = {**row["config"], "path_version": config.PATH_VERSION}
+    humans = conn.execute("SELECT id, device, features, path_version FROM attempts WHERE cohort='human_test' AND path_version=%s ORDER BY id",
+                          (config.PATH_VERSION,)).fetchall()
+    forged = conn.execute("SELECT id, round_id, features, path_version FROM attempts WHERE cohort='red' AND path_version=%s ORDER BY id",
+                          (config.PATH_VERSION,)).fetchall()
     invalid_devices = [r["id"] for r in humans
                        if not isinstance(r["device"], str) or r["device"] not in {"mouse", "trackpad", "touch"}]
     if invalid_devices:
@@ -216,10 +228,10 @@ def _evaluate(conn, candidate_id: str) -> tuple[dict, str]:
         raise HTTPException(422, f"{len(invalid_devices)} retained human attempt(s) have invalid devices: {shown}. "
                                  "Review and correct their device metadata before gate evaluation.")
     try:
-        VariantIn.model_validate(row["config"])
+        VariantIn.model_validate(candidate)
         VariantIn.model_validate(baseline)
-        result = engine_adapter.gate(row["config"], baseline, humans, forged)
-        snapshot = {"candidate": row["config"], "baseline": baseline, "humans": humans, "forgeries": forged}
+        result = engine_adapter.gate(candidate, baseline, humans, forged)
+        snapshot = {"candidate": candidate, "baseline": baseline, "humans": humans, "forgeries": forged}
         fingerprint = hashlib.sha256(json.dumps(snapshot, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
     except (ValueError, TypeError, KeyError) as exc:
         raise HTTPException(422, "invalid variant or evidence; gate cannot be evaluated") from exc

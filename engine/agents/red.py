@@ -78,7 +78,8 @@ async def run_red(model, client, *, run_id, round_number=1, traces=(), budget=No
             if not observations and any(params.values()):
                 raise ValueError("first attempt must use all-zero parameters to establish the baseline")
             challenge = client.challenge(run_id)
-            result = client.submit(challenge, forge_trail(challenge["seed"], **params), run_id)
+            result = client.submit(challenge, forge_trail(challenge["seed"], **params,
+                                   path_version=challenge.get("path_version", "v1")), run_id)
             return record(result, params, "forge_and_submit")
 
     @tool
@@ -99,7 +100,8 @@ async def run_red(model, client, *, run_id, round_number=1, traces=(), budget=No
             if trace.get("cohort") != "human_test" or trace.get("tester", {}).get("consent") is not True:
                 raise ValueError("transplantation requires consented team evidence")
             challenge = client.challenge(run_id)
-            result = client.submit(challenge, transplant(trace, challenge["seed"]), run_id,
+            result = client.submit(challenge, transplant(trace, challenge["seed"],
+                                   path_version=challenge.get("path_version", "v1")), run_id,
                                    device=trace["device"], pointer_type=trace.get("pointer_type", "mouse"))
             return record(result, {"trace_index": trace_index}, "transplant_human_error")
 

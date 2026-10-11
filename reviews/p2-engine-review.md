@@ -254,13 +254,31 @@ what found everything real in this review.
 
 My commits to review: `cab7242` and `20c30cb` on `p1-platform`.
 
-**1. `limits.py` is in-memory and trusts the first `X-Forwarded-For` hop.**
-Only safe because Caddy overwrites that header. If anything else ever fronts the app, or if
-someone reaches port 8000 directly, a client can spoof their IP and bypass the 300/min
-ceiling. Your `deploy.sh` keeps 8000 reachable on localhost; the firewall rule for 8000 is
-still open from the HTTPS-fallback plan. **I think that rule should be deleted now that
-HTTPS works** — tell me if you're still relying on it. Also: single-worker only. If anyone
-adds `--workers 2`, every limit silently halves and the SSE broadcaster breaks.
+**1. `limits.py` trusted the first `X-Forwarded-For` hop — FIXED in `691b7f2`, and I had the
+reasoning backwards when I first wrote this.**
+
+I originally wrote that this was "only safe because Caddy overwrites that header". Caddy does
+not overwrite it; `reverse_proxy` **appends** the peer it saw. So a direct request carrying
+`X-Forwarded-For: 1.2.3.4` reaches the app as `1.2.3.4, <real client>`, and taking the first
+hop meant the bucket key was attacker-chosen. Measured, 50 requests from one client:
+
+```
+OLD -> 50 distinct buckets  = ceiling bypassed
+NEW -> 1 distinct bucket    = ceiling enforced
+```
+
+It was a live bypass of the 300/min ceiling reachable from the public internet through Caddy,
+not a hypothetical. Now takes the last hop, and only when the socket peer is our own proxy.
+
+Also corrected: I said the **port 8000 firewall rule should be deleted because it allows
+bypassing the limits**. That was wrong — `compose.yaml` publishes `127.0.0.1:8000:8000`, so
+8000 is bound to loopback on the VM and was never publicly reachable whatever the firewall
+said. The rule is unnecessary, not dangerous. The real bug was the header handling above.
+
+Still true and unfixed: the limiter is **in-memory and single-worker only**. `--workers 2`
+silently halves every limit and breaks the SSE broadcaster. `CHALLENGES_PER_MIN` and
+`IP_PER_MIN` are now env-tunable (they were hardcoded), so the ceiling can be raised on venue
+wi-fi — where the whole room shares one public IP — without a redeploy.
 
 **2. Reservation cap semantics — I made a judgement call you may disagree with.**
 On the third reservation for a session, the token is **consumed and then rejected** with

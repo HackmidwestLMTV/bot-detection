@@ -84,7 +84,7 @@ function tick() {
 el('new').onclick=async () => {
   el('new').disabled=true; el('results').hidden=true; el('consent').checked=false;
   el('nondominant').checked=false; el('save').disabled=true; el('save-state').textContent=''; attemptId=null; samples=[];
-  try { challenge=await api('/dev/challenges',{}); path=makePath(challenge.seed); draw(); message('Press on the comet to start. Follow it for three seconds; keep your finger down on touchscreens.'); }
+  try { challenge=await api('/dev/challenges',{}); path=makePath(challenge.seed,challenge.path_version||'v1'); draw(); message('Press on the comet to start. Follow it for three seconds; keep your finger down on touchscreens.'); }
   catch(error) { message(error.message); el('new').disabled=false; }
 };
 canvas.onpointerdown=event => {

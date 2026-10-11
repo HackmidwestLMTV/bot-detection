@@ -62,8 +62,8 @@ function harness({ reduced = false, tester = false, manualWorker = false, route 
     crypto: webcrypto, Uint8Array, AbortController, DOMException,
     sessionStorage: { getItem: () => null, setItem() {} },
     makePath: () => () => [100, 100], drawStill() {},
-    runComet: (_canvas, _seed, { signal }) => new Promise((resolve, reject) => {
-      comets.push({ resolve, signal });
+    runComet: (_canvas, _seed, { signal, pathVersion }) => new Promise((resolve, reject) => {
+      comets.push({ resolve, signal, pathVersion });
       signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
     }),
     fetch: async (path, options) => {
@@ -193,4 +193,25 @@ test('playing again clears the earlier pass until the new challenge succeeds', a
   h.el('consent').checked = false;
   h.el('tester').fire('change');
   await flush();
+});
+
+test('tester follows the issued path version and sees real feature measurements', async () => {
+  const h = harness({ tester: true, route: path => {
+    if (path === '/v1/challenges') return reply({ challenge_id: 'smooth-challenge', seed: 42, path_version: 'smooth_v2' });
+    if (path.endsWith('/attempt')) return reply({ result: { score: .75, features: {
+      lag_ms: { value: 200, enabled: true, ok: true },
+      power_law_beta: { value: .33, enabled: false, ok: true },
+    } }, token: 'pass' });
+  } });
+  h.el('consent').checked = true;
+  h.el('tester').device = 'touch';
+  h.el('tester').fire('change');
+  await until(() => h.comets.length === 1);
+  assert.equal(h.comets[0].pathVersion, 'smooth_v2');
+  h.comets[0].resolve({ samples: [[0, 1, 2], [1500, 3, 4]], pointerType: 'touch' });
+  await until(() => !h.el('reserve').disabled);
+  assert.match(h.el('result').innerHTML, /Reaction delay/);
+  assert.match(h.el('result').innerHTML, /200.00 ms/);
+  assert.match(h.el('result').innerHTML, /Measured only/);
+  assert.match(h.el('result').innerHTML, /provisional/);
 });

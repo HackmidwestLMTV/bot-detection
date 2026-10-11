@@ -56,7 +56,7 @@ Deployment exports an isolated snapshot under `~/.local/share/followit/releases`
 
 Only Caddy exposes public ports. Port 8000 binds to VM localhost for diagnostics; bootstrap adds a UFW deny before any legacy public 8000 allow rule. Remove any port 8000 inbound rule from the Linode Cloud Firewall too; setup does not control cloud firewall settings. Use HTTPS for phones and the dashboard. Retrieve `LAB_KEY` privately from the VM's `.env` when connecting the lab. Repository settings establish the intended firewall configuration; the existing VM and cloud rules, container build and live readiness still need verification on the actual host.
 
-Caddy is the public edge and replaces the forwarded client IP with its connected peer before sending requests to Uvicorn. Uvicorn trusts proxy headers from the private Compose network and the VM, so those peers must remain trusted and app port 8000 must never become publicly accessible. Adding an external reverse proxy or CDN changes the IP trust boundary; configure and verify the complete forwarding chain before enabling it, rather than trusting browser-supplied forwarding headers.
+Caddy is the public edge and explicitly replaces the forwarded client IP with its connected peer before sending requests to Uvicorn. Uvicorn accepts proxy headers only from loopback (`127.0.0.1`, `::1`) and the listed private IPv4/IPv6 proxy CIDRs (`10/8`, `172.16/12`, `192.168/16`, `fc00::/7`), rather than every address. It resolves the client before the limiter reads `request.client`; the application never reparses the raw forwarding header. These ranges cover the private Compose network but also trust other peers in those ranges, so the VM and containers must remain trusted and app port 8000 must never become publicly accessible. Caddy's explicit overwrite remains essential, including for clients whose IP is itself in a trusted range. Adding an external reverse proxy or CDN changes the IP trust boundary; configure and verify the complete forwarding chain before enabling it, rather than trusting browser-supplied forwarding headers.
 
 ### Managed Postgres
 1. In Cloud Manager (cloud.linode.com), go to **Databases → Create Database Cluster**.
@@ -106,7 +106,7 @@ Show it at `/lab?replay=1`, which displays the REPLAY banner. The Approve button
 
 ## Known limits
 - Rate limits and the event stream live in memory, so the app runs as one uvicorn worker on one VM.
-- The client IP comes from the first `X-Forwarded-For` hop set by Caddy. Port 8000 is bound to VM localhost; public requests must pass through Caddy.
+- The limiter uses the client IP resolved by Uvicorn's explicit trusted-proxy policy. Caddy replaces incoming `X-Forwarded-For`; public requests must pass through it, and port 8000 is bound to VM localhost. Private network peers remain trusted as described in the deployment section.
 - The proof-of-work uses `crypto.subtle`, which only exists on HTTPS or localhost. Phones need the HTTPS URL.
 - The scorer's feature bands start from motor-control literature and need recalibrating from the collected human traces. The gate is only as good as that sample (count by device in `/healthz`).
 - "Non-dominant hand" stands in for less precise movement. It is not a model of disability, and the gate's device groups are coarse.

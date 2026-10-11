@@ -15,6 +15,12 @@ export function toLogical(clientX, clientY, rect) {
 
 export const round1 = v => Math.round(v * 10) / 10;
 
+// Pointer capture keeps the stream coming when a finger or mouse slides past the edge of
+// the canvas, so raw conversions can land outside it (we measured -141 px on an overshoot).
+// The contract says samples are logical canvas px, so hold them inside the canvas.
+export const clampToCanvas = (x, y) =>
+  [Math.min(Math.max(x, 0), W), Math.min(Math.max(y, 0), H)];
+
 // event.timeStamp shares performance.now()'s origin in modern browsers. Very old engines
 // used epoch ms; if the two are wildly apart, fall back to the handler time.
 export function eventTime(ts, now) {
@@ -27,8 +33,9 @@ export function buildSamples(events, t0, rect, now) {
   for (const ev of events) {
     const t = eventTime(ev.timeStamp, now ?? ev.timeStamp) - t0;
     if (t < 0 || t > DURATION_MS) continue;
-    const [x, y] = toLogical(ev.clientX, ev.clientY, rect);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const [rx, ry] = toLogical(ev.clientX, ev.clientY, rect);
+    if (!Number.isFinite(rx) || !Number.isFinite(ry)) continue;
+    const [x, y] = clampToCanvas(rx, ry);
     out.push([round1(t), round1(x), round1(y)]);
   }
   return out;
@@ -95,19 +102,19 @@ function drawComet(ctx, [x, y], tail, glowAlpha = 0.45) {
 }
 
 // Draw the comet resting at its start point, no animation (used for reduced-motion / idle).
-export function drawStill(canvas, seed) {
+export function drawStill(canvas, seed, pathVersion = 'v1') {
   const ctx = setupCanvas(canvas);
   drawBackground(ctx, starfield(seed));
-  drawComet(ctx, makePath(seed)(0), []);
+  drawComet(ctx, makePath(seed, pathVersion)(0), []);
 }
 
 // ---- The game ----
 
-export function runComet(canvas, seed, { onProgress, onStart, signal } = {}) {
+export function runComet(canvas, seed, { onProgress, onStart, signal, pathVersion = 'v1' } = {}) {
   return new Promise((resolve, reject) => {
     const ctx = setupCanvas(canvas);
     const stars = starfield(seed);
-    const pos = makePath(seed);
+    const pos = makePath(seed, pathVersion);
     const start = pos(0);
     let state = 'waiting', t0 = 0, raf = 0, progress = 0, pointerType = '';
     const samples = [], tail = [];

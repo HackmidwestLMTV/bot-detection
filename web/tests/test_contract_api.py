@@ -40,7 +40,8 @@ def test_challenge_keys(client):
     r = client.post("/v1/challenges", json={"session_id": "s_test"})
     assert r.status_code == 200
     body = r.json()
-    assert set(body) == {"challenge_id", "seed", "variant_id", "duration_ms", "expires_in_s"}
+    assert set(body) == {"challenge_id", "seed", "variant_id", "duration_ms", "expires_in_s", "path_version"}
+    assert body["path_version"] == config.PATH_VERSION
     assert body["duration_ms"] == 3000 and body["expires_in_s"] == 120
     assert 0 <= body["seed"] < 2**32
 

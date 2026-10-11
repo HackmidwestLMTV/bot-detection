@@ -139,7 +139,8 @@ def test_red_hooks_enforce_tool_budgets_and_round_unlock():
 
 
 @pytest.mark.parametrize("round_number", [1, 3])
-def test_real_sdk_red_round_uses_http_and_corrects_fabricated_report(round_number):
+@pytest.mark.parametrize("path_version", ["v1", "smooth_v2"])
+def test_real_sdk_red_round_uses_http_and_corrects_fabricated_report(round_number, path_version):
     pytest.importorskip("openai")
     pytest.importorskip("strands")
     pytest.importorskip("dotenv")
@@ -147,7 +148,7 @@ def test_real_sdk_red_round_uses_http_and_corrects_fabricated_report(round_numbe
     from engine.agents.common import ModelSettings, make_model
     from engine.agents.hooks import RequestBudget
     from engine.agents.red import run_red
-    app = create_lab_app()
+    app = create_lab_app(variant={**variant(), "path_version": path_version})
     lab = lab_client(app)
     responses = [0]
     def respond(request):
@@ -183,6 +184,8 @@ def test_real_sdk_red_round_uses_http_and_corrects_fabricated_report(round_numbe
         assert report.attempts == 2 and report.agent == "red" and report.round == round_number
         assert report.passed == sum(row["pass"] for row in app.state.attempts)
         assert report.evidence == [row["attempt_id"] for row in app.state.attempts]
+        assert app.state.attempts[0]["features"]["err_mean_px"]["value"] < 1e-9
+        assert all(row["path_version"] == path_version for row in app.state.attempts)
         assert app.state.events[-1]["type"] == "round_report"
         assert all(len(row["data"]["summary"]) <= 200 for row in app.state.events if row["type"] == "tool_result")
     finally:

@@ -1,5 +1,10 @@
 import os
 
+# Challenge motion is an operator choice, never an AI-proposed scoring rule.
+PATH_VERSION = os.environ.get("PATH_VERSION", "smooth_v2")
+if PATH_VERSION not in ("v1", "smooth_v2"):
+    raise ValueError("PATH_VERSION must be v1 or smooth_v2")
+
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:dev@localhost:5432/followit")
 LAB_KEY = os.environ.get("LAB_KEY", "dev-lab-key")
 
@@ -17,7 +22,9 @@ TOKEN_TTL_S = 120
 CHALLENGE_TTL_S = 120
 POW_TTL_S = 120
 POW_BITS = int(os.environ.get("POW_BITS", "18"))  # drop to 16 if a real phone takes > 4 s
-CHALLENGES_PER_MIN = 10
 ATTEMPTS_PER_CHALLENGE = 5
 RESERVATIONS_PER_SESSION = 2
-IP_PER_MIN = 300
+# Env-tunable: the whole venue shares one public IP, so the ceiling may need raising on
+# the night without a code change. Defaults are the contract values.
+CHALLENGES_PER_MIN = int(os.environ.get("CHALLENGES_PER_MIN", "10"))
+IP_PER_MIN = int(os.environ.get("IP_PER_MIN", "300"))

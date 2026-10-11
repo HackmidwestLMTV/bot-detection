@@ -9,7 +9,7 @@ from engine.forger import forge_trail
 def submit(client):
     challenge = client.post("/dev/challenges").json()
     response = client.post("/dev/attempts", json={"challenge_id": challenge["challenge_id"],
-        "samples": forge_trail(challenge["seed"]), "device": "mouse", "pointer_type": "mouse"})
+        "samples": forge_trail(challenge["seed"], path_version=challenge["path_version"]), "device": "mouse", "pointer_type": "mouse"})
     assert response.status_code == 200
     return response.json()
 
@@ -32,6 +32,8 @@ def test_recorder_consent_unique_save_and_no_implicit_persistence(tmp_path):
     trace = json.loads((folder / saved["filename"]).read_text())
     assert trace["tester"] == {"consent": True, "nondominant_hand": True}
     assert trace["cohort"] == "human_test" and trace["device"] == "mouse"
+    assert trace["path_version"] == "smooth_v2"
+    assert attempt["result"]["features"]["err_mean_px"]["value"] < 1e-9
     assert "seed" in trace and len(trace["samples"]) == 181
     second = submit(client)
     next_saved = client.post("/dev/recordings", json={"attempt_id": second["attempt_id"], "consent": True}).json()

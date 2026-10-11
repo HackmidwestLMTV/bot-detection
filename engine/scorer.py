@@ -5,7 +5,7 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from engine.path import make_path
+from engine.path import PATH_VERSIONS, make_path
 
 FEATURES = ("lag_ms", "err_mean_px", "submoves_per_s", "jitter_px", "power_law_beta")
 STEP_MS = 1000 / 60
@@ -77,9 +77,9 @@ def count_speed_peaks(speed):
     return len(selected)
 
 
-def features(samples, seed: int):
+def features(samples, seed: int, path_version="v1"):
     times, xy = resample(samples)
-    path = make_path(seed)
+    path = make_path(seed, path_version)
     target = np.asarray([path(t) for t in times])
     # Use identical observations for every lag and never evaluate negative challenge time.
     eligible = times >= 500
@@ -115,7 +115,8 @@ def validate_variant(variant):
         enabled = variant["enabled"]
         bands = variant["features"]
         threshold = variant["pass_threshold"]
-        valid = (isinstance(variant["id"], str) and bool(variant["id"])
+        valid = (variant.get("path_version", "v1") in PATH_VERSIONS
+                 and isinstance(variant["id"], str) and bool(variant["id"])
                  and isinstance(enabled, list) and bool(enabled)
                  and all(isinstance(name, str) for name in enabled)
                  and len(set(enabled)) == len(enabled) and set(enabled) <= set(FEATURES)
@@ -153,4 +154,4 @@ def score_features(values, variant):
 
 def score(samples: list, seed: int, variant: dict):
     validate_variant(variant)
-    return score_features(features(samples, seed), variant)
+    return score_features(features(samples, seed, variant.get("path_version", "v1")), variant)

@@ -35,3 +35,15 @@ def test_disabled_bands_are_validated(band):
 def test_full_valid_configuration_and_extras_are_preserved():
     cfg = {**V1, "reason": "review me", "enabled": ["lag_ms"], "pass_threshold": 1}
     assert VariantIn.model_validate(cfg).model_dump() == cfg
+
+
+@pytest.mark.parametrize("version", ["v1", "smooth_v2"])
+def test_supported_path_version_is_preserved(version):
+    cfg = {**V1, "path_version": version}
+    assert VariantIn.model_validate(cfg).model_dump() == cfg
+
+
+@pytest.mark.parametrize("version", ["unknown", None, [], {}, 2])
+def test_invalid_path_version_is_rejected(version):
+    with pytest.raises(ValidationError):
+        VariantIn.model_validate({**V1, "path_version": version})

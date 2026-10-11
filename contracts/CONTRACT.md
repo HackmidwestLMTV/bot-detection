@@ -40,6 +40,12 @@ followit/
 | Limits | 10 challenges/min per `session_id`, 5 attempts per challenge, 2 reservations per `session_id`, IP ceiling 300/min |
 
 ### The comet path (both implementations must give identical numbers)
+Version note (October 10 demo update): the algorithm below is retained as `v1`.
+New platform/recorder challenges use the versioned smooth path specified in
+[SMOOTH_PATH.md](SMOOTH_PATH.md). An omitted version in old recordings or direct
+path calls still means `v1`. Challenge responses pin `path_version`; both rendering
+and scoring must use it, and calibration/gate evidence must not mix versions.
+
 PRNG is **mulberry32** on a 32-bit unsigned integer seed. Draw random numbers in exactly this order:
 1. For the x axis, then the y axis, for each of 3 components with base amplitudes **x: 130, 50, 20** and **y: 80, 35, 15**: `freq = 0.10 + r()*0.25` Hz, `phase = r()*2π`, `amp = base*(0.6 + 0.4*r())`.
 2. Two "kicks" (sudden direction changes) with base times 900 and 1900 ms: `tk = base + r()*500`, `angle = r()*2π`, `mag = 60 + r()*30`.

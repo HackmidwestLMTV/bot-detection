@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 
 import pytest
@@ -210,4 +211,11 @@ def test_proxy_trust_requires_private_app_and_overwritten_client_header():
     assert '"8000:8000"' not in compose
     assert "--proxy-headers" in compose
     assert "--forwarded-allow-ips" in compose
+    command = next(line.partition("command:")[2] for line in compose.splitlines()
+                   if "command: uvicorn " in line)
+    arguments = shlex.split(command)
+    trusted = arguments[arguments.index("--forwarded-allow-ips") + 1].split(",")
+    assert "*" not in trusted
+    assert set(trusted) == {"127.0.0.1", "::1", "10.0.0.0/8", "172.16.0.0/12",
+                            "192.168.0.0/16", "fc00::/7"}
     assert "header_up X-Forwarded-For {remote_host}" in caddy

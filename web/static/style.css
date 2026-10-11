@@ -38,6 +38,10 @@ canvas { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; border:
 .privacy-note { text-align: center; font-size: 11px; color: var(--muted); margin-top: 14px; }
 .linkish { background: transparent; border: 0; color: var(--muted); text-decoration: underline; font-size: 12px; padding: 8px 0; }
 .result,.reserve-msg,.confirm { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #f5f7fa; margin-top: 10px; font-size: 13px; }
+.feature-results { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 12px; }
+.feature-results caption { text-align: left; font-weight: 700; margin-bottom: 8px; }
+.feature-results th,.feature-results td { text-align: left; padding: 8px 5px; border-bottom: 1px solid var(--line); }
+.feature-results th { font-weight: 500; }
 .reserve-msg{color:#8c2d29;background:#fff3ef;border-color:#f0c9be}.confirm{color:var(--ok);background:#edf8f0;border-color:#b9dec9}.confirm-title{font-size:19px;font-weight:700}.confirm code{overflow-wrap:anywhere}.confirm-note{margin-top:6px}
 .tester { margin-top: 18px; border: 1px solid #e6ccb4; background: #fff9f2; border-radius: 12px; padding: 16px; font-size: 13px; }.tester-title{font-weight:700}.thanks{color:var(--ok);display:block}
 .check-row { display: flex; align-items: start; gap: 10px; margin-top: 12px; }.check-row input{width:20px;height:20px;flex:none;accent-color:var(--accent)}

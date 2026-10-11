@@ -153,13 +153,14 @@ async function startChallenge() {
   }
 
   // Keep the prompt pill away from the comet so it never hides it.
-  el.overlay.classList.toggle('top', makePath(ch.seed >>> 0)(0)[1] > 200);
+  el.overlay.classList.toggle('top', makePath(ch.seed >>> 0, ch.path_version || 'v1')(0)[1] > 200);
   overlay('Put your finger on the comet');
   const ac = new AbortController();
   S.abort = ac;
   let run;
   try {
     run = await runComet(el.canvas, ch.seed >>> 0, {
+      pathVersion: ch.path_version || 'v1',
       onProgress: setRing,
       onStart: () => overlay(''),
       signal: ac.signal,
@@ -179,6 +180,20 @@ async function startChallenge() {
 }
 
 function normPointer(t) { return t === 'touch' || t === 'pen' ? t : 'mouse'; }
+
+function featureResults(result) {
+  const labels = { lag_ms: ['Reaction delay', 'ms'], err_mean_px: ['Average distance', 'px'],
+    submoves_per_s: ['Small corrections', '/s'], jitter_px: ['Movement jitter', 'px'],
+    power_law_beta: ['Speed / curvature', ''] };
+  const rows = Object.entries(labels).flatMap(([key, [label, unit]]) => {
+    const feature = result.features?.[key];
+    if (!feature || !Number.isFinite(feature.value)) return [];
+    const status = !feature.enabled ? 'Measured only' : feature.ok ? 'In band' : 'Outside band';
+    return [`<tr><th scope="row">${label}</th><td>${feature.value.toFixed(2)} ${unit}</td><td>${status}</td></tr>`];
+  });
+  return rows.length ? `<table class="feature-results"><caption>Your movement measurements</caption><tbody>${rows.join('')}</tbody></table>
+    <p class="muted">These bands are provisional. A score describes this attempt; it does not prove whether someone is human.</p>` : '';
+}
 
 async function submitAttempt(ch, { samples, pointerType }, gen) {
   overlay('');
@@ -221,10 +236,10 @@ async function submitAttempt(ch, { samples, pointerType }, gen) {
     updateThanks();
     const score = typeof result.score === 'number' ? result.score.toFixed(2) : '–';
     showResult(`<p><strong>${token ? 'Passed' : 'Not a pass this time'}</strong> · score ${score}</p>
-      <p class="muted">Thank you. Every trace helps us make the check fairer.</p>`);
+      ${featureResults(result)}<p class="muted">Thank you. This attempt's measurements were recorded with your consent.</p>`);
     showRetry('Play again', startChallenge);
     if (token) setPassed(token, "You're through. You can reserve now, or play again.");
-    else { overlay(''); say('Thanks, that trace was saved. Play again, or skip to reserve.'); el.skip.hidden = false; }
+    else { overlay(''); say('Your score is ready. Play again, or skip to reserve.'); el.skip.hidden = false; }
     return;
   }
 

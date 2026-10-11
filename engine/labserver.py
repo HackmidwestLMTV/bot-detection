@@ -68,13 +68,15 @@ def create_lab_app(*, lab_key="dev", variant=None, humans=(), forgeries=(), cloc
         variant = json.loads((Path(__file__).resolve().parents[1] / "contracts/fixtures/variant_v1.json").read_text())
     validate_variant(variant)
     variant = deepcopy(variant)
+    path_version = variant.get("path_version", "v1")
     initial = deepcopy(variant)
     app = FastAPI(title="Follow It disposable lab")
-    challenges, attempts, events = {}, deepcopy(list(forgeries)), []
+    challenges, attempts, events = {}, deepcopy([r for r in forgeries if r.get("path_version", "v1") == path_version]), []
     for row in attempts:
         score_features(row["features"], variant)
     variants, approvals, commands = {variant["id"]: variant}, {}, []
-    human_rows = deepcopy(list(humans))
+    all_humans = list(humans)
+    human_rows = deepcopy([r for r in all_humans if r.get("path_version", "v1") == path_version])
     for row in human_rows:
         if row.get("device") not in ("mouse", "trackpad", "touch"):
             raise ValueError("invalid human device")
@@ -105,7 +107,8 @@ def create_lab_app(*, lab_key="dev", variant=None, humans=(), forgeries=(), cloc
 
     @app.get("/healthz")
     def health():
-        return {"status": "ok", "mode": "disposable_lab", "human_records": len(human_rows)}
+        return {"status": "ok", "mode": "disposable_lab", "human_records": len(human_rows),
+                "path_version": path_version, "excluded_legacy_human_traces": len(all_humans) - len(human_rows)}
 
     @app.get("/lab")
     def lab_page():
@@ -124,9 +127,9 @@ def create_lab_app(*, lab_key="dev", variant=None, humans=(), forgeries=(), cloc
             raise HTTPException(429, "restart the disposable lab to clear capacity")
         challenge_id = uuid4().hex
         seed = secrets.randbits(32)
-        challenges[challenge_id] = {"seed": seed, "expires": clock() + 120}
+        challenges[challenge_id] = {"seed": seed, "expires": clock() + 120, "path_version": path_version}
         return {"challenge_id": challenge_id, "seed": seed, "variant_id": variant["id"],
-                "duration_ms": 3000, "expires_in_s": 120}
+                "duration_ms": 3000, "expires_in_s": 120, "path_version": path_version}
 
     @app.post("/v1/challenges/{challenge_id}/attempt", dependencies=[Depends(auth)])
     def attempt(challenge_id: str, body: RedAttempt):
@@ -139,13 +142,14 @@ def create_lab_app(*, lab_key="dev", variant=None, humans=(), forgeries=(), cloc
             samples = normalize_samples(body.samples)
             if samples[-1, 0] > 3000:
                 raise ValueError("samples exceed challenge duration")
-            result = score(samples, item["seed"], variant)
+            result = score(samples, item["seed"], {**variant, "path_version": item["path_version"]})
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         del challenges[challenge_id]
         with lock:
             attempts.append({"attempt_id": "att_" + uuid4().hex, "round_id": body.round_id,
-                             "features": result["features"], "score": result["score"], "pass": result["pass"]})
+                             "features": result["features"], "score": result["score"], "pass": result["pass"],
+                             "path_version": item["path_version"]})
         # Match the contract: attempt IDs are obtained from the forgery listing.
         return {"result": result, "token": None, "fallback": None if result["pass"] else "pow"}
 
@@ -172,6 +176,8 @@ def create_lab_app(*, lab_key="dev", variant=None, humans=(), forgeries=(), cloc
     def propose(body: dict):
         try:
             validate_variant(body)
+            if body.get("path_version", path_version) != path_version:
+                raise ValueError("scoring proposals cannot change the lab path_version")
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         with lock:

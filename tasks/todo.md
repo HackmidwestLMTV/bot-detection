@@ -161,3 +161,15 @@ Platform fixes requested from teammate; visual changes will use an isolated bran
 Previous revision 731c36a passed GitHub CI including both Docker image builds and
 packaged real-engine imports. The prior planning restrictions above are historical:
 the user later authorized committing everything and directly fixing cross-team code.
+
+## Demo-first continuation
+
+- [x] Review pending PRs #2/#3 together and fix proxy trust with actual middleware tests.
+- [x] Add versioned smooth motion with Python/JS parity; preserve legacy evidence.
+- [x] Pin challenge versions through rendering, scoring, storage, Red and gate evidence.
+- [x] Show real feature measurements in tester mode and preserve consent controls.
+- [x] Start the smooth localhost ticket demo and LAN recorder for Luc's phone.
+- [x] Write root phases.md with current state, ownership, verified commands and next steps.
+- [x] Full local verification: 220 passed, two expected skips; frontend13 passed.
+- [ ] Finish CI, merge both reviewed PRs, share phases.md with P1.
+- [ ] Get Luc's real smooth-comet/touch feedback and the existing HTTPS endpoint.

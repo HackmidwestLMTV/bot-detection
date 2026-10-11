@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, StrictBool
 
 from engine.scorer import normalize_samples, score
+from engine.path import PATH_VERSIONS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,11 +30,14 @@ class SaveRecording(BaseModel):
     nondominant_hand: StrictBool = False
 
 
-def create_app(*, traces_dir=None, path_js=None, clock=time.monotonic):
+def create_app(*, traces_dir=None, path_js=None, clock=time.monotonic, path_version="smooth_v2"):
+    if path_version not in PATH_VERSIONS:
+        raise ValueError("unsupported path_version")
     app = FastAPI(title="Follow It local recorder")
     traces_dir = Path(traces_dir) if traces_dir is not None else ROOT / "contracts/fixtures/human_traces"
     path_js = Path(path_js) if path_js is not None else ROOT / "web/static/path.js"
     variant = json.loads((ROOT / "contracts/fixtures/variant_v1.json").read_text())
+    variant["path_version"] = path_version
     challenges = {}
     attempts = {}
 
@@ -63,8 +67,9 @@ def create_app(*, traces_dir=None, path_js=None, clock=time.monotonic):
         prune()
         challenge_id = uuid4().hex
         seed = secrets.randbits(32)
-        challenges[challenge_id] = {"seed": seed, "expires": clock() + 120}
-        return {"challenge_id": challenge_id, "seed": seed, "duration_ms": 3000, "expires_in_s": 120}
+        challenges[challenge_id] = {"seed": seed, "path_version": path_version, "expires": clock() + 120}
+        return {"challenge_id": challenge_id, "seed": seed, "path_version": path_version,
+                "duration_ms": 3000, "expires_in_s": 120}
 
     @app.post("/dev/attempts")
     def attempt(body: Attempt):
@@ -82,7 +87,8 @@ def create_app(*, traces_dir=None, path_js=None, clock=time.monotonic):
         del challenges[body.challenge_id]
         attempt_id = uuid4().hex
         attempts[attempt_id] = {"expires": clock() + 600, "filename": None, "trace": {
-            "seed": challenge["seed"], "samples": samples.tolist(), "device": body.device,
+            "seed": challenge["seed"], "path_version": challenge["path_version"],
+            "samples": samples.tolist(), "device": body.device,
             "pointer_type": body.pointer_type, "cohort": "human_test", "round_id": None,
         }}
         return {"attempt_id": attempt_id, "result": result, "saved": False}
