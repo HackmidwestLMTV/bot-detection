@@ -8,6 +8,9 @@ S3_BUCKET = os.environ.get("S3_BUCKET", "followit-trails")
 S3_KEY = os.environ.get("S3_KEY")
 S3_SECRET = os.environ.get("S3_SECRET")
 
+# Public origin for links/QR codes, e.g. https://172-104-5-6.sslip.io. Falls back to the request's own URL.
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "").rstrip("/")
+
 # Constants from contracts/CONTRACT.md
 DURATION_MS = 3000
 TOKEN_TTL_S = 120

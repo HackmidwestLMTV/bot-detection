@@ -131,8 +131,10 @@ function boot() {
   const $ = (id) => document.getElementById(id);
   const params = new URLSearchParams(location.search);
   const state = { key: null, variants: [], gates: [], activeId: null, approvals: new Map(), es: null };
+  // A replayed run only posts events; the DB never changes, so the events decide which variant is active.
+  const replay = params.get("replay") === "1";
 
-  if (params.get("replay") === "1") $("replay-banner").hidden = false;
+  if (replay) $("replay-banner").hidden = false;
 
   const toast = (m) => { $("toast").textContent = m || ""; };
   const getKey = () => { try { return localStorage.getItem("followit_lab_key"); } catch { return null; } };
@@ -207,7 +209,7 @@ function boot() {
     try {
       const [vs, act] = await Promise.all([api("GET", "/v1/variants"), api("GET", "/v1/variants/active")]);
       if (Array.isArray(vs)) state.variants = vs;
-      if (act && act.id) state.activeId = act.id;
+      if (act && act.id && !(replay && state.activeId)) state.activeId = act.id;
     } catch (e) { toast(String(e.message || e)); }
     renderCmp();
   }

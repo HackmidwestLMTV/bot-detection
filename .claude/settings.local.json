@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/pip install *)",
+      "Bash(.venv/bin/python -c \"import segno; print\\(segno.make\\('https://x/?tester=1', error='m'\\).svg_inline\\(scale=2\\)[:120]\\)\")"
+    ]
+  }
+}

@@ -6,3 +6,4 @@ boto3
 numpy
 httpx
 pytest
+segno

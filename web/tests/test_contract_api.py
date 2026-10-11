@@ -28,6 +28,12 @@ def client():
 def test_healthz(client):
     r = client.get("/healthz")
     assert r.status_code == 200 and r.json()["ok"]
+    assert "total" in r.json()["human_traces"]
+
+
+def test_qr_page_points_at_tester_mode(client):
+    r = client.get("/qr")
+    assert r.status_code == 200 and "<svg" in r.text and "/?tester=1" in r.text
 
 
 def test_challenge_keys(client):
@@ -49,6 +55,3 @@ def test_lab_routes_need_key(client):
     r = client.get("/v1/variants/active", headers=LAB)
     assert r.status_code == 200 and r.json()["id"]
 
-
-# TODO as routes land: /attempt returns {result, token, fallback}; red attempt w/o key -> 403;
-#      /activate w/o approval -> 403; /v1/lab/human-features items have device + features.

@@ -1,9 +1,11 @@
 {
-    # Staging CA until DNS resolves; remove this line once the name works (rate limits).
-    acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+    # Production Let's Encrypt by default. If you're using a real domain whose DNS isn't resolving yet, set
+    # ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory in .env first (rate limits).
+    acme_ca {$ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
 }
 
-followit.example.com {
+# DOMAIN comes from .env. No DNS needed: use <vm-ip-with-dashes>.sslip.io (e.g. 172-104-5-6.sslip.io).
+{$DOMAIN} {
     reverse_proxy app:8000 {
         flush_interval -1        # needed so SSE streams immediately
     }
