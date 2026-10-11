@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+psycopg[binary]
+psycopg_pool
+boto3
+numpy
+httpx
+pytest
+segno

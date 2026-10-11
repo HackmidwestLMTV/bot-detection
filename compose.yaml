@@ -1,0 +1,49 @@
+services:
+  app:
+    build: .
+    env_file: .env
+    restart: unless-stopped
+    # --workers 1: the SSE broadcaster and rate limits live in memory
+    command: uvicorn web.app:app --host 0.0.0.0 --port 8000 --workers 1
+    ports: ["127.0.0.1:8000:8000"] # diagnostic access on the VM; public traffic uses Caddy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5)"]
+      interval: 5s
+      timeout: 6s
+      retries: 12
+      start_period: 15s
+  worker:
+    build:
+      context: .
+      dockerfile: engine/Dockerfile
+    environment:
+      API_BASE: http://app:8000
+      LAB_ALLOW_INTERNAL_HTTP: "1"
+      LAB_KEY: ${LAB_KEY:?Configure LAB_KEY in .env}
+      AKAMAI_BASE_URL: ${AKAMAI_BASE_URL:-https://ws.akamai-workshops.com/v1}
+      AKAMAI_API_KEY: ${AKAMAI_API_KEY:-}
+      MODEL_ID: ${MODEL_ID:-hackathon-chat}
+      WORKER_STATE_PATH: /srv/engine/.state/worker.sqlite3
+    volumes: ["worker_state:/srv/engine/.state"]
+    depends_on:
+      app:
+        condition: service_healthy
+    stop_grace_period: 20s
+    command: python -m engine.worker
+    restart: unless-stopped
+    profiles: ["engine"]
+  caddy:
+    image: caddy:2
+    env_file: .env               # DOMAIN, optional ACME_CA
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes: ["./Caddyfile:/etc/caddy/Caddyfile", "caddy_data:/data"]
+    depends_on:
+      app:
+        condition: service_healthy
+  db:                          # local dev only: `docker compose --profile local up -d db`
+    image: postgres:18
+    environment: { POSTGRES_PASSWORD: dev, POSTGRES_DB: followit }
+    ports: ["5432:5432"]
+    profiles: ["local"]
+volumes: { caddy_data: {}, worker_state: {} }
