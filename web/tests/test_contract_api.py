@@ -47,7 +47,7 @@ def test_challenge_keys(client):
     assert set(body) == {"challenge_id", "seed", "variant_id", "duration_ms", "expires_in_s", "path_version", "presentation_version"}
     assert body["path_version"] == config.PATH_VERSION
     assert body["presentation_version"] == config.PRESENTATION_VERSION
-    assert body["duration_ms"] == 3000 and body["expires_in_s"] == 120
+    assert body["duration_ms"] == 5000 and body["expires_in_s"] == 120
     assert 0 <= body["seed"] < 2**32
 
 

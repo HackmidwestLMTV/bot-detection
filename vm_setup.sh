@@ -7,7 +7,7 @@ if [ -n "${RELEASE_REF:-}" ] && [ -n "${BRANCH:-}" ]; then
   echo 'Set RELEASE_REF or the legacy BRANCH override, not both.' >&2
   exit 2
 fi
-release_ref="${RELEASE_REF:-origin/${BRANCH:-p2}}"
+release_ref="${RELEASE_REF:-origin/${BRANCH:-main}}"
 FOLLOWIT_DIR="${FOLLOWIT_DIR:-$HOME/followit}"
 
 # Docker engine + compose plugin

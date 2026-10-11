@@ -1,178 +1,114 @@
-# Person 2 engine and agent operations
+# Agent and deployment operations
 
-The engine, Red, Blue, fixed gate, and queue worker are implemented under `engine/`.
-The reviewed platform and engine are integrated on **p2**, pending PR #2 review.
+Run commands from the repository root with Python 3.12 and the dependencies in
+[the main README](../README.md). Keep credentials in the ignored `.env` or a private
+environment. The app owns PostgreSQL; the worker uses authenticated HTTP only.
 
-## Install and run
+## Configure and run agents
 
-Use Python 3.12 from the repository root:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r engine/requirements.txt -r engine/requirements-dev.txt
-.\.venv\Scripts\python.exe -m pytest -q
-```
-
-`requirements.txt` now includes runtime agent dependencies so Person 1's existing
-image build can import the worker. `requirements-core.txt` is the smaller option
-for engine/recorder-only development. `requirements-agents.txt` is a compatible
-alias for the full runtime.
-
-Put model credentials and `API_BASE`/`LAB_KEY` in the ignored root `.env` (see
-`agents.env.example`). Never commit credentials. Blue sends per-device counts
-and aggregate human-feature statistics to the configured model; raw human trails
-stay local. The user explicitly authorized aggregate statistics to Akamai in this
-session. Red sends synthetic feature results. Transplantation reads only local,
-consented team traces and submits the generated forgery to the configured lab.
-
-```powershell
-# Read-only platform readiness check; no model calls or queue claims:
-.\.venv\Scripts\python.exe -m engine.worker --check-api
-# One round:
-.\.venv\Scripts\python.exe -m engine.worker --once red
-.\.venv\Scripts\python.exe -m engine.worker --once blue
-# Consume dashboard commands until Ctrl+C:
-.\.venv\Scripts\python.exe -m engine.worker
-```
-
-`--round 3` with `--once red` explicitly tests transplantation. Otherwise each
-agent's round number persists in `engine/.state/worker.sqlite3`. `--state` or
-`WORKER_STATE_PATH` can select another journal; `--traces` or `HUMAN_TRACES_DIR`
-selects consented local traces. Use a new state file for a fresh demo sequence:
-the platform's Reset button does not reset the worker's journal.
-
-## Local lab and approvals
-
-The recorder stays on port 8000. Start the disposable lab separately:
-
-```powershell
-$env:LAB_KEY = 'dev'
-.\.venv\Scripts\python.exe -m uvicorn engine.labserver:app --host 127.0.0.1 --port 8001
-```
-
-Open `http://127.0.0.1:8001/lab`, enter the local key, and connect. Start the worker
-in another terminal with `API_BASE=http://127.0.0.1:8001` and matching `LAB_KEY`.
-Run Red and Blue from the buttons. Human features are loaded from consented local
-recordings when the lab starts. Restart after adding recordings. A local-only
-`LAB_FORGERIES_FILE` may point to a JSON object with a `forgeries` array to restore
-previous synthetic scoring evidence; it is never treated as human evidence.
-
-Blue can read forgery scores, per-device human percentiles, and the active rule;
-propose at most three candidates; run the fixed gate; and request activation.
-Gate, approval-card, and activation events come from the server, matching Person
-1's current API and avoiding duplicate dashboard cards.
-
-An activation request interrupts Strands. The worker runs the gate again, requests
-a dashboard decision, and polls for up to 180 seconds (configurable with
-`--approval-timeout`, 1–1800). It resumes with `y` only after approval and unchanged
-evidence. The activation tool checks the gate, approval status, and evidence a
-final time and consumes its local grant. Denial, timeout, unknown status, or
-changed evidence cannot activate. An approval that times out may still be visible
-on the platform; the worker does not decide it on the person's behalf.
-
-After confirmed activation the SDK stops without another model call. The worker
-builds a typed report from observed proposal/activation counts and the candidate's
-stated rationale. This avoids losing a completed change to a model-summary timeout.
-Other round summaries still use validated Strands structured output.
-
-The disposable lab and integrated PostgreSQL platform both enforce an approving
-gate and evidence-bound, single-use approval at activation. The platform locks
-evidence writes during verification and activation, closing the race between a
-client check and the server change. Legacy approvals without a fingerprint fail
-closed. This protection was added in platform PR #1 before its merge.
-
-## Budgets, failures, and restart behavior
-
-- Red: eight forge calls, four transplants from round 3, and 16 model calls.
-- Blue: three proposals, bounded reads/gate/activation calls, and 24 model calls.
-- Requests are paced across rounds in one worker process. Run one worker replica;
-  separate processes do not share the workshop's model quota.
-- Model requests time out after 60 seconds; HTTP lab calls after 15 seconds.
-  Red invocations have a 300-second deadline. Blue has bounded invocation and
-  approval waits plus an outer deadline. Synchronous HTTP operations can delay
-  cancellation until their own timeout.
-- SDK/provider retries remain off. Queue connection failures back off up to 30
-  seconds. Failed runs emit sanitized error events and do not kill the daemon.
-- The SQLite journal claims each run at most once and survives restarts. A run
-  interrupted by a crash is not automatically replayed, preventing duplicate
-  proposals or activation. Queue a new run to retry. The shared command API has
-  no lease/ack/requeue endpoint; there is no exactly-once recovery guarantee.
-
-## Person 1 integration and deployment
-
-Platform PR #1 is merged; `p2` includes that platform for integrated review in PR #2.
-Check another checkout without changing its DB:
-
-```powershell
-.\.venv\Scripts\python.exe -m engine.check_platform PATH_TO_PLATFORM_CHECKOUT
-```
-
-This command checks route presence and adapter behavior. The full integrated
-suite has also run against a disposable local PostgreSQL 18 database. GitHub CI
-has built both Docker images and verified their real-engine imports. Live Akamai
-deployment remains a separate verification step.
-
-Use the canonical deployment script from a prepared VM checkout:
+Set `API_BASE`, `LAB_KEY`, `AKAMAI_BASE_URL`, `AKAMAI_API_KEY`, and `MODEL_ID`.
+Use `MODEL_ID=hackathon-chat` for the configured Akamai endpoint. The worker loads
+the root `.env`; existing process variables take precedence.
 
 ```bash
-bash deploy.sh engine
+python -m engine.agents.smoke --check-config
+python -m engine.worker --check-api
+python -m engine.worker
 ```
 
-The script builds an isolated snapshot of the whole integrated `p2` revision,
-preserving the operator's checkout. Pin a reviewed commit with
-`RELEASE_REF=<commit-sha> bash deploy.sh engine`. After PR #2 merges, use
-`RELEASE_REF=origin/main bash deploy.sh engine`. It builds the app and dedicated worker image,
-waits for app health, and checks the authenticated API. It does not provision a VM.
+The first two commands make no model calls. The worker consumes Run Red / Run Blue
+commands from `/lab`. For one explicit round, use `--once red` or `--once blue`.
+`python -m engine.agents.smoke` makes bounded live model calls with disposable
+counter tools to check tool use, typed reports, denial, and approval interrupts.
+It does not activate an application policy.
 
-The Compose override selects `engine/Dockerfile`, persists worker state, and opts
-in specifically to `http://app:8000`. Other remote HTTP origins remain rejected;
-use HTTPS outside the Docker service network. The dedicated worker build excludes
-`.env`, local runtime state, and human recordings. Mount approved team recordings
-read-only on the VM if transplantation is needed; do not bake them into the image.
-The root Compose definition now includes these worker settings directly.
+Akamai is the default provider. Optional Bedrock requires an explicit
+`USE_BEDROCK=1`, `AWS_REGION`, `BEDROCK_MODEL_ID`, and suitable AWS credentials.
+It is not an automatic fallback or a verified provider for the live demo.
 
-## Verification and remaining evidence
+## Evidence and approval
 
-The suite covers path parity, all scorer features, consented recording, calibration,
-residual transplantation, real SDK tool loops, budget enforcement, gate regression,
-approval/denial/timeout/stale evidence, report integrity, and persistent command
-dispatch. Scripted SDK fixtures never go into `human_traces/`.
+Red tests generated trails against the issued challenge's path, duration, and
+scoring policy. It can use consented local residual transplantation from round 3.
+Blue receives aggregate human-feature statistics and synthetic attack results.
+Neither sends raw human recordings in model prompts.
 
-Integrated local verification: 172 Python tests passed with two expected skips,
-and 12 frontend tests passed. The browser completed skip, proof of work, reservation,
-and single-use token rejection. Desktop and 390 px layouts were inspected. The
-dependency consistency check found no conflicts. Container builds and packaged
-imports also pass in GitHub CI. Live cloud checks remain outstanding until the
-team provides the existing deployment endpoint.
+The server compares matching path/presentation evidence and requires fewer forgery
+passes with no increase in human rejection counts within represented device groups.
+It fingerprints the evidence and rechecks it at activation. Passing the gate only
+requests operator review. Denial, timeout, missing evidence, or changed evidence
+cannot activate a policy. If the baseline already rejects all stored forgeries,
+there is no strict improvement on that sample; keep the baseline or collect new
+attack evidence instead of resetting state to manufacture a pass.
 
-Live Akamai Red completed seven attacks with four passes against provisional v1.
-Live Blue proposed one candidate reducing accepted forgeries from 9/16 to 6/16;
-mouse rejections stayed 1/8 and trackpad rejections stayed 0/1. The user explicitly
-approved it in the disposable localhost lab, and activation was verified. Its
-original model explanation timed out; a clearly labeled report was recovered from
-server events. The SDK now ends immediately after activation, verified by tests.
+## Worker state and failures
 
-Calibration remains provisional: nine consented recordings, eight mouse and one
-trackpad, with no touch evidence. Shared v1 is unchanged. The audit-generated draft
-accepts all nine but cannot establish unseen-user accuracy. Finish the tenth/touch
-recording and rerun `python -m engine.calibrate` before coordinating shared-band
-changes with Person 1. Never force the gate or tune forgeries to manufacture a win.
+- Red allows eight forge calls, four transplants from round 3, and 16 model calls.
+  Blue allows three proposals and 24 model calls, with bounded tool budgets.
+- Model requests time out after 60 seconds; lab HTTP calls after 15 seconds.
+  Approval waits default to 180 seconds. Failures emit sanitized timestamped events.
+- Run one worker replica: pacing budgets are shared within a process, not between
+  replicas. Model failures preserve the active visitor policy.
+- The SQLite journal persists round counters and claims. A crash does not
+  automatically replay a claimed run. Queue a new run to retry; there is no
+  exactly-once queue recovery guarantee. `/lab` Reset does not reset that journal.
+- `--state` / `WORKER_STATE_PATH` selects the journal; `--traces` /
+  `HUMAN_TRACES_DIR` selects consented local traces. Use separate state for
+  disposable rehearsals. Never classify generated traces as human evidence.
 
-Local replay evidence is saved in ignored `engine/.state/verified-cycle.jsonl`.
-If shown as a recording, label it **REPLAY**. Runtime evidence and credentials stay
-ignored. The user subsequently authorized committing the planning notes and nine
-consented team recordings; those are included in PR #2.
+## Disposable local lab
 
-## Reciprocal review decisions
+For engine experiments without PostgreSQL, set a local test `LAB_KEY` and run:
 
-Keep the strict gate: when the baseline blocks all stored forgeries, retaining it
-is a valid no-change outcome. A successor still requires demonstrated improvement;
-new Red evidence can justify another Blue round. No contract change was made.
+```bash
+python -m uvicorn engine.labserver:app --host 127.0.0.1 --port 8001
+```
 
-Keep the provisional 0.75 threshold. With four enabled features, changing it to
-0.70 would accept exactly the same scores. Extra features or wider bands require
-real calibration across devices; synthetic trails do not establish human margin.
+Configure a separate worker with `API_BASE=http://127.0.0.1:8001` and the same key.
+Open `/lab` on port 8001. The lab loads consented local calibration files at startup;
+restart after collection. It does not issue real reservation passes and is not a
+substitute for the PostgreSQL integration tests. Keep it bound to localhost.
 
-Legacy human evidence with an invalid device fails gate evaluation with the
-affected attempt IDs. Correct only verified metadata; do not silently discard
-recordings to make a candidate pass. New malformed device/cohort inputs are rejected
-before consuming challenge attempts.
+## Deploy to Linode
+
+The existing collection deployment uses `compose.yaml` plus
+`compose.research.yaml`: one app, one worker, Caddy, private persistent recordings,
+and a read-only model mount. Only Caddy exposes public HTTP/HTTPS. Port 8000 binds
+to VM localhost. Restrict SSH to operator addresses. Caddy overwrites forwarded
+client IPs; review the full trusted-proxy chain before adding a CDN.
+
+For a new VM, review `vm_setup.sh` and explicitly pin an integrated commit with
+`RELEASE_REF=<reviewed-commit-sha>`. Configure Managed PostgreSQL access for the VM,
+`DATABASE_URL` with TLS, `DOMAIN`, `PUBLIC_URL`, a private lab key, and provider
+credentials. The scripts default to `origin/main`; pin `RELEASE_REF` to a reviewed
+commit when deploying a reproducible release.
+
+For the **existing research VM**, use the paired, rollback-enabled collection
+installer. Package the reviewed working tree locally:
+
+```bash
+python release-artifacts/package-research.py --release followit-reviewed-20261011
+```
+
+Choose a unique lowercase release name. Transfer its archive securely to the VM,
+verify its SHA-256, extract it into a fresh `/root/followit/releases/<release>`
+directory, and privately copy the active release's `.env` there with mode 0600.
+From that new directory, run `bash deploy-research.sh`.
+
+The installer requires an existing app and worker. It builds both images before
+replacement, waits for idle lab work, preserves the active policy and historical
+evidence, then verifies health, source hashes, private storage, retention, and worker
+API access. Verification failure rolls both services back. Old releases remain
+available. A stale journal row can block the idle check after a crash; inspect the
+worker and journal instead of deleting evidence to force deployment.
+
+Current collection storage is private VM disk; paid Object Storage is not required
+or enabled by this workflow. The installer expects no loaded shadow artifact.
+Optional future artifact deployment needs the validation described in
+[model research](ml/README.md). It cannot activate a scoring policy.
+
+After rollout, check public `/healthz`, `/`, `/lab`, and `/research`, plus authenticated
+worker readiness. Do not run resetting test suites or replay fixtures against the
+live database. Retrieve `LAB_KEY` privately from the active environment and share
+only participant invitations. See [recordings](../recordings/README.md) for an
+explicitly labeled local backup demonstration.

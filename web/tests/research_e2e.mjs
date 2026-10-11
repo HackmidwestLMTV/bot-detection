@@ -30,11 +30,13 @@ try {
   await page.waitFor('document.getElementById("overlay").textContent.includes("inside the ring")');
   const request = page.lastReq('/v1/challenges');
   const ch = JSON.parse(await page.responseBody(request.id));
+  assert.equal(ch.duration_ms, 5000);
+  assert.equal(ch.presentation_version, 'plain_ring_5s_v2');
   const rect = await page.rect('#comet');
-  const positions = await page.eval(`Array.from({length:181},(_,i)=>window.makePath(${ch.seed},'smooth_v2')(i*3000/180))`);
+  const positions = await page.eval(`Array.from({length:301},(_,i)=>window.makePath(${ch.seed},${JSON.stringify(ch.path_version)})(i*5000/300))`);
   const started = Date.now();
-  while (Date.now() - started < 3000) {
-    const step = Math.min(180, Math.floor((Date.now() - started) * 180 / 3000));
+  while (Date.now() - started < 5000) {
+    const step = Math.min(300, Math.floor((Date.now() - started) * 300 / 5000));
     const [x, y] = positions[step];
     await page.c.send('Input.dispatchMouseEvent', { type: 'mouseMoved', button: 'none', buttons: 0,
       x: rect.x + x * rect.w / 600, y: rect.y + y * rect.h / 400, pointerType: 'mouse' });
@@ -44,7 +46,7 @@ try {
   const attempt = JSON.parse(await page.postBody(page.lastReq('/attempt')));
   assert.equal(attempt.collector_version, 'pointer_v2');
   assert.equal(attempt.device, 'trackpad');
-  assert(attempt.samples.length >= 40 && attempt.samples.at(-1)[0] - attempt.samples[0][0] >= 2500);
+  assert(attempt.samples.length >= 40 && attempt.samples.at(-1)[0] - attempt.samples[0][0] >= 4500);
   assert.equal(attempt.session_id, JSON.parse(await page.postBody(request)).session_id);
   assert.deepEqual(errors, []);
   await page.eval('document.getElementById("tester").scrollIntoView({block:"start"})');

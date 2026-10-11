@@ -1,69 +1,75 @@
-# Phase 1 engine kit
+# Movement engine
 
-Local deterministic movement analysis and a consent-based recorder. No AI agents,
-model connection, production deployment, or full lab API emulator are included yet.
-Work is on the user-requested `p2` branch. Person 1's pre-merge deployment script
-must use `origin/p2` instead of the guide's `origin/p2-engine` if it includes this work.
+Deterministic path generation, movement features, scoring, synthetic attacks, and
+the fixed comparison gate. Agent operation is documented in
+[OPERATIONS.md](OPERATIONS.md); sequence models in [ml/README.md](ml/README.md).
 
-## Run on Windows (PowerShell, from the repository root)
+## Local calibration recorder
 
-```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r engine/requirements-dev.txt
-.\engine\prepare-recorder.ps1
-.\.venv\Scripts\python.exe -m pytest contracts engine/tests -q
-.\.venv\Scripts\python.exe -m uvicorn engine.devserver:app --host 127.0.0.1 --port 8000
+Install the dependencies from the root README, then run:
+
+```bash
+python -m uvicorn engine.devserver:app --host 127.0.0.1 --port 8004
 ```
 
-Open http://127.0.0.1:8000/dev/recorder. Choose mouse, trackpad, or touchscreen,
-select **New recording**, press the comet, and follow it for three seconds.
-Keep touch/pen contact until the recording ends. Scoring does not write a file.
-Check the consent box and select **Save recording** to save a genuine human trace
-in `contracts/fixtures/human_traces/team_<unique-id>.json`.
+Open `http://127.0.0.1:8004/dev/recorder`. Select the actual device, start a new
+recording, and follow the ball for five seconds. Keep touch/pen contact until
+the end. Scoring does not save a file. With explicit consent, **Save recording**
+writes to `contracts/fixtures/human_traces/`. Browser automation and generated
+traces must never be saved as human evidence. Local recorder files require
+manual cleanup; the deployed research store has a separate 72-hour policy.
 
-The save includes `seed`, `path_version`, `presentation_version: plain_ring_v1`,
-`samples`, `device`, `pointer_type`, `cohort: human_test`,
-`round_id: null`, and `tester: {consent: true, nondominant_hand: ...}`. An unsaved
-attempt expires after ten minutes or a server restart. Saved recordings persist.
-Browser automation and generated traces must never be saved to this dataset.
-Legacy recordings are excluded from new-display calibration and gates. Collect
-fresh mouse, trackpad, and real-touch recordings after changing the display.
-The ball and ring have no direction arrow or movement trail. The start area
-covers the visible ring at phone sizes.
-Mouse versus trackpad cannot be inferred from pointer events; select it manually.
+Current recordings use `roaming_v3` and `plain_ring_5s_v2`. Mouse/trackpad is a
+participant selection, not something Pointer Events can identify. Prior path
+and presentation cohorts remain separate. The visible ring is the start area;
+there is no direction arrow or fading movement trail. See the
+[path geometry](../contracts/ROAMING_PATH.md).
 
-For a phone on the same trusted Wi-Fi, start with `--host 0.0.0.0` and visit
-`http://<computer-LAN-IP>:8000/dev/recorder`. This is a development server without
-authentication, so return to the localhost binding after local testing. The
-production checkout's keyboard-accessible proof-of-work fallback is Person 1's
-responsibility; this movement recorder requires a pointing device.
+For supervised phone collection on trusted Wi-Fi, `bash scripts/collect.sh`
+starts the recorder and prints its LAN URL and QR. This development recorder has
+no authentication: stop it after the session. The deployed `/research` flow is
+the route for enrolled, consented model-training data; local calibration files
+are not accepted as ML research records.
 
-`prepare-recorder.ps1` copies the unchanged JavaScript path from the existing
-`origin/p1-platform` remote-tracking branch and excludes only that local copy via
-`.git/info/exclude`. It refuses to overwrite a different file. It does not fetch
-or modify Person 1's branch. On another OS, obtain the same file with
-`git show origin/p1-platform:web/static/path.js`, place it at `web/static/path.js`,
-and add `/web/static/path.js` to `.git/info/exclude`.
+Ask participants to follow naturally and keep unsuccessful attempts too. Do not
+coach them to imitate a target score. Collect mouse, trackpad, and physical phone
+touch separately; emulated touch is only a software input test.
+
+## Audit calibration
+
+```bash
+python -m engine.calibrate --path-version roaming_v3 --presentation-version plain_ring_5s_v2
+```
+
+The read-only audit checks consent, device metadata, duplicates, cohort versions,
+and samples. It prints provisional band suggestions, human rejections by device,
+and perfect-target forgery results. It does not alter v1 or activate a variant.
+Its small-sample readiness checks are not an accuracy estimate. Historical audits
+must explicitly select the original path and presentation; never relabel evidence.
 
 ## Integration interfaces
 
-- `engine.path.make_path(seed)` returns `pos(t_ms) -> (x, y)` using the contract's
+- `engine.path.make_path(seed, path_version)` returns `pos(t_ms) -> (x, y)` using the contract's
   exact unsigned 32-bit random arithmetic and 600 × 400 logical canvas.
-- `engine.scorer.features(samples, seed)` returns five plain numerical features.
+- `engine.scorer.features(samples, seed, path_version)` returns five plain numerical features.
 - `engine.scorer.score(samples, seed, variant)` returns the unchanged `ScoreResult`.
 - `engine.scorer.score_features(values, variant)` also accepts the stored nested
-  feature objects (`{"value": ..., ...}`) returned by Person 1's API.
+  feature objects (`{"value": ..., ...}`) returned by the API.
 - `engine.gate.gate(candidate, baseline, humans, forgeries)` returns the unchanged
   `GateResult`. Device groups are mouse, trackpad, and touch. Missing human or
   forgery evidence rejects review. An unrepresented device has no safety evidence;
   the gate makes no claim about it. Gate approval never activates a variant.
 - `engine.forger.forge_trail(seed, lag_ms=0, noise_px=0, submove_hz=0, overshoot=0,
-  rng_seed=None)` returns sample triples. Noise is seeded Gaussian noise per axis;
+  rng_seed=None, path_version="v1", duration_ms=5000)` returns sample triples.
+  Pass the issued challenge's version and duration. Noise is seeded Gaussian noise per axis;
   corrections are a 2-pixel sine/cosine offset. Overshoot adds a fraction of the
   delayed path's preceding 100 ms displacement. Defaults follow the target exactly.
-- `engine.forger.transplant(trace, seed)` transfers `trace.samples - old_target`
+- `engine.forger.transplant(trace, seed, path_version)` transfers `trace.samples - old_target`
   onto the new target at the original timestamps. It preserves residuals without
   clamping. Neither forger function writes files.
+
+Direct path/feature calls retain `v1` as their compatibility default; callers
+must supply the issued version when processing current challenges.
 
 ## Feature definitions (provisional, not a trained detector)
 
@@ -96,24 +102,19 @@ human pass rate or tuned-forgery success rate follows from these synthetic tests
 
 | Endpoint | Behavior |
 |---|---|
-| `GET /healthz` | Recorder status and availability of the local path.js copy. |
-| `GET /dev/recorder`, `GET /dev/path.js` | Recorder page and unchanged browser path code. |
-| `POST /dev/challenges` | New random seed, challenge ID, three-second duration, 120-second expiration. |
+| `GET /healthz` | Recorder status and availability of the shared path.js. |
+| `GET /dev/recorder`, `GET /dev/path.js` | Recorder page and shared browser path code. |
+| `POST /dev/challenges` | New random seed, challenge ID, five-second duration, 120-second expiration. |
 | `POST /dev/attempts` | Accept challenge ID, samples, device, and pointer type; score once and retain the attempt in memory. Return attempt ID, result, and `saved: false`. |
 | `POST /dev/recordings` | Accept attempt ID, literal boolean `consent: true`, and optional `nondominant_hand`. Save once; a repeated save returns the same filename. |
 
-The recorder only accepts timestamps within the challenge's 0–3000 ms window
+The recorder only accepts timestamps within the challenge's 0–5000 ms window
 and at most 10,000 samples. A hidden page or cancelled pointer recording must
 be restarted. Consent records the tester's declaration, not proof of human origin.
 
 ## Verification
 
-Run `python -m pytest contracts engine/tests -q` using the virtual environment.
-Node.js is needed for the existing browser-path parity test. The adapter test
-reads `origin/p1-platform:web/engine_adapter.py` without modifying that branch.
-Recorder API tests use temporary directories exclusively for synthetic traces.
-The default pytest configuration also includes the engine tests and retains
-`web/tests` for the eventual platform merge.
-
-Next phase: validate Strands/model tool calling, then collect real recordings
-and calibrate v1 before building Red and Blue around these heuristics.
+Run `python -m pytest contracts engine/tests -q` with development dependencies.
+Node.js is required for Python/JavaScript path parity. Recorder tests use
+temporary directories for generated fixtures; integrated web tests require a
+disposable PostgreSQL database. See the root README for the complete suite.

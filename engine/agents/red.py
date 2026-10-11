@@ -11,6 +11,7 @@ from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent, HookProvider
 from engine.agents.hooks import RequestBudget, SmokeHooks
 from engine.agents.schemas import RoundReport
 from engine.forger import forge_trail, transplant
+from engine.path import DURATION_MS
 from engine.scorer import validate_variant
 
 
@@ -79,7 +80,8 @@ async def run_red(model, client, *, run_id, round_number=1, traces=(), budget=No
                 raise ValueError("first attempt must use all-zero parameters to establish the baseline")
             challenge = client.challenge(run_id)
             result = client.submit(challenge, forge_trail(challenge["seed"], **params,
-                                   path_version=challenge.get("path_version", "v1")), run_id)
+                                   path_version=challenge.get("path_version", "v1"),
+                                   duration_ms=challenge.get("duration_ms", DURATION_MS)), run_id)
             return record(result, params, "forge_and_submit")
 
     @tool

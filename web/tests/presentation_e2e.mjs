@@ -53,15 +53,37 @@ async function run(label, callback) {
 }
 
 try {
+  await run('320px checkout keeps the entire start ring in the canvas across roaming seeds', async page => {
+    await page.phone({ mobile: true, width: 320, dsf: 2 });
+    await page.goto('/');
+    await page.waitFor(`document.getElementById('overlay').textContent.includes('inside the ring')`);
+    const rect = await page.rect('#comet');
+    const margin = await page.eval(`(() => {
+      let margin = Infinity;
+      for(let seed = 0; seed < 200; seed++) {
+        const path = window.makePath(seed, 'roaming_v3');
+        for(let t = 0; t <= 5000; t += 20) {
+          const [x,y] = path(t);
+          margin = Math.min(margin,x,600-x,y,400-y);
+        }
+      }
+      return margin;
+    })()`);
+    assert(margin * rect.w / 600 >= 33, `ring clipped: canvas ${rect.w}px, margin ${margin * rect.w / 600}px`);
+    assert(await page.eval(`document.documentElement.scrollWidth <= innerWidth`), 'checkout overflows phone viewport');
+    console.log(`INFO 320px viewport: canvas ${rect.w}px, sampled minimum ring clearance ${(margin * rect.w / 600).toFixed(1)}px`);
+  });
+
   await run('checkout ring edge starts; moving target has no arrow or trail', async page => {
     await page.goto('/');
     await page.waitFor(`document.getElementById('overlay').textContent.includes('inside the ring')`);
     const request = page.lastReq('/v1/challenges');
     const challenge = JSON.parse(await page.responseBody(request.id));
-    assert.equal(challenge.presentation_version, 'plain_ring_v1');
-    assert.equal(challenge.path_version, 'smooth_v2');
+    assert.equal(challenge.presentation_version, 'plain_ring_5s_v2');
+    assert.equal(challenge.path_version, 'roaming_v3');
+    assert.equal(challenge.duration_ms, 5000);
     const rect = await page.rect('#comet');
-    const point = await page.eval(`window.makePath(${challenge.seed},'smooth_v2')(0)`);
+    const point = await page.eval(`window.makePath(${challenge.seed},${JSON.stringify(challenge.path_version)})(0)`);
     const x = rect.x + point[0]*rect.w/600 + 32*.9, y = rect.y + point[1]*rect.h/400;
     await page.c.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 1 }] });
     await page.waitFor(`document.getElementById('overlay').textContent === ''`, 2000);
@@ -84,9 +106,11 @@ try {
     await page.waitFor(`document.getElementById('status').textContent.includes('Touch or point')`);
     const request = page.lastReq('/dev/challenges');
     const challenge = JSON.parse(await page.responseBody(request.id));
-    assert.equal(challenge.presentation_version, 'plain_ring_v1');
+    assert.equal(challenge.presentation_version, 'plain_ring_5s_v2');
+    assert.equal(challenge.path_version, 'roaming_v3');
+    assert.equal(challenge.duration_ms, 5000);
     const rect = await page.rect('#trail');
-    const point = await page.eval(`import('${RECORDER}/dev/path.js').then(m=>m.makePath(${challenge.seed},'smooth_v2')(0))`);
+    const point = await page.eval(`import('${RECORDER}/dev/path.js').then(m=>m.makePath(${challenge.seed},${JSON.stringify(challenge.path_version)})(0))`);
     const x = rect.x + point[0]*rect.w/600 + 32*.9, y = rect.y + point[1]*rect.h/400;
     await page.c.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 1 }] });
     await page.waitFor(`document.getElementById('status').textContent.includes('Follow the')`, 2000);

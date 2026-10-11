@@ -1,56 +1,37 @@
-## SHARED CONTRACT (identical in both files, frozen at 5:30 PM)
+# API and data contract
 
-This section is word-for-word the same in `person-1-platform.md` and `person-2-engine.md`. If you change anything here, both of you change it, and you note it in `contracts/CHANGELOG.md` (see "Changing the contract").
+The FastAPI app owns persistence and reservations. It imports deterministic
+engine functions through `web.engine_adapter`; the separate agent worker calls
+the authenticated HTTP API. See [the changelog](CHANGELOG.md) for protocol
+changes. The examples below illustrate shapes, not measured human performance.
 
-### The product in one sentence
-> On a ticket checkout, one AI (Red) learns to fake a human hand, a second AI (Blue) tries to block it, and before any block goes live, a fixed gate shows how many real people it would lock out, and a person approves.
+## Constants
 
-### Who owns what (never edit the other person's folders)
-
-```text
-followit/
-├── contracts/            SHARED. Person 2 commits it at 5:30; Person 1 pulls that one commit. Then frozen.
-│   ├── CONTRACT.md       this section
-│   ├── CHANGELOG.md      every change after 5:30, one line each
-│   └── fixtures/
-│       ├── path_vectors.json       seed → comet positions (both path implementations must match)
-│       ├── variant_v1.json         the starting variant
-│       ├── score_example.json      a real ScoreResult
-│       ├── gate_example.json       a real GateResult
-│       └── events_example.jsonl    one full lab cycle of SSE events (for Person 1's dashboard)
-├── web/                PERSON 1 ONLY (not named platform/: that hides Python's built-in module): FastAPI app, DB, storage, tokens, PoW, all HTML/JS, deploy files
-└── engine/               PERSON 2 ONLY: path.py, scorer.py, gate.py, forger.py, agents/, worker.py, devserver.py
-```
-
-- **Only two places where the code meets:**
-  1. Person 1's app **imports three pure functions** from `engine`: `make_path`, `score`, `gate`. It always goes through `web/engine_adapter.py`, which falls back to stubs until the merge.
-  2. Person 2's worker **talks to Person 1's app over HTTP** (the lab endpoints below). It never touches the database.
-- **One repo, two branches:** `p1-platform` and `p2-engine`. Merge to `main` at the end.
-- **Both of you run** `pytest contracts/` **before every push.** Each of you writes your half of those tests (below).
-
-### Constants
 | Name | Value |
 |---|---|
 | Canvas | 600 × 400 logical px (scale with CSS; always convert pointer coords to logical px) |
-| Challenge duration | 3,000 ms of following |
+| Challenge duration | 5,000 ms of following (`plain_ring_5s_v2`) |
 | Sample rate | browser sends every `pointermove` (coalesced), about 60 Hz; the scorer resamples to 60 Hz |
 | Token lifetime | 120 s, single use, bound to `session_id` and `action="reserve_ticket"` |
 | PoW | SHA-256(`nonce` + ":" + `counter`), leading zero **bits** = `bits` (start 18) |
 | Lab auth | header `X-Lab-Key: <LAB_KEY>` on every `/v1/lab/*` and on red attempts |
 | Limits | 10 challenges/min per `session_id`, 5 attempts per challenge, 2 reservations per `session_id`, IP ceiling 300/min |
 
-### The comet path (both implementations must give identical numbers)
-Version note (October 10 demo update): the algorithm below is retained as `v1`.
-New platform/recorder challenges use the versioned smooth path specified in
-[SMOOTH_PATH.md](SMOOTH_PATH.md). An omitted version in old recordings or direct
+## The comet path (both implementations must give identical numbers)
+
+The algorithm below is retained as legacy `v1`. New challenges use
+[roaming_v3](ROAMING_PATH.md); [smooth_v2](SMOOTH_PATH.md) remains documented
+for historical recordings. An omitted version in old recordings or direct
 path calls still means `v1`. Challenge responses pin `path_version`; both rendering
 and scoring must use it, and calibration/gate evidence must not mix versions.
 
 PRNG is **mulberry32** on a 32-bit unsigned integer seed. Draw random numbers in exactly this order:
+
 1. For the x axis, then the y axis, for each of 3 components with base amplitudes **x: 130, 50, 20** and **y: 80, 35, 15**: `freq = 0.10 + r()*0.25` Hz, `phase = r()*2π`, `amp = base*(0.6 + 0.4*r())`.
 2. Two "kicks" (sudden direction changes) with base times 900 and 1900 ms: `tk = base + r()*500`, `angle = r()*2π`, `mag = 60 + r()*30`.
 
 Position at `t_ms`:
+
 - `x = 300 + Σ amp·sin(2π·freq·t + phase)`, `y = 200 + Σ …` (t in seconds)
 - For each kick: `u = clamp((t_ms − tk)/120, 0, 1)`, `s = u²(3 − 2u)`, `x += mag·cos(angle)·s`, `y += mag·sin(angle)·s`
 - Clamp x to [30, 570] and y to [30, 370].
@@ -62,10 +43,10 @@ Position at `t_ms`:
 ```
 Check to within 0.01 px.
 
-### Data shapes (JSON)
+## Data shapes (JSON)
 
-October 10 plain-ring demo update: each challenge returns `path_version` and
-`presentation_version="plain_ring_v1"`. The server stores both on attempts and
+October 11 five-second update: each challenge returns `path_version` and
+`presentation_version="plain_ring_5s_v2"`. The server stores both on attempts and
 consented recordings, and snapshots the issued scoring policy on the challenge.
 Retiring/resetting a variant does not change an already issued check. Missing
 historical presentation metadata means `legacy`; current gates and lab listings
@@ -80,7 +61,7 @@ The visitor QR is `/qr`; consent-based calibration uses `/qr/tester`.
  "cohort": "organic | human_test | red",
  "tester": {"consent": true, "nondominant_hand": false},
  "round_id": null,
- "presentation_version": "plain_ring_v1"}
+ "presentation_version": "plain_ring_5s_v2"}
 ```
 - `samples` are `[t_ms, x, y]`. `t_ms` counts from the moment the comet starts moving. `x` and `y` are logical canvas px.
 - `tester` appears only in tester mode.
@@ -89,7 +70,7 @@ The visitor QR is `/qr`; consent-based calibration uses `/qr/tester`.
   mismatched display metadata returns 409 without recording current human evidence.
   This prevents accidental mixing from cached tester pages, not forged telemetry.
 
-**ScoreResult** (`engine.score()` returns it; the attempt endpoint returns it):
+**ScoreResult** (`engine.scorer.score()` and the attempt API return it; the ordinary checkout UI hides detailed features):
 ```json
 {"score": 0.75, "pass": true, "variant": "v1",
  "features": {
@@ -121,7 +102,7 @@ The visitor QR is `/qr`; consent-based calibration uses `/qr/tester`.
 
 **Gate rule** (fixed, no model): approve for human review only if **no device group rejects more humans than the baseline** AND **fewer forgeries pass than under the baseline**. Otherwise reject, listing every reason.
 
-### Python functions Person 1 imports from `engine`
+## Python interfaces imported through `web.engine_adapter`
 ```python
 from engine.path import make_path        # make_path(seed:int) -> pos(t_ms:float) -> (x, y)
 from engine.scorer import score          # score(samples:list, seed:int, variant:dict) -> ScoreResult dict
@@ -129,14 +110,14 @@ from engine.scorer import score          # score(samples:list, seed:int, variant
 from engine.gate import gate             # gate(candidate:dict, baseline:dict,
                                          #      humans:[{"device","features"}], forgeries:[{"round_id","features"}]) -> GateResult
 ```
-`score()` always computes all 5 features (store `features` as given). `gate()` uses **stored feature values only**, never raw trails, so it's instant.
+`score()` always computes all 5 features (store `features` as given). `gate()` uses **stored feature values only**, never raw trails, without a model call.
 
-### HTTP API (Person 1 builds every route; Person 2's worker calls the lab ones)
+## HTTP API
 
 **Public**
 | Method | Path | Body → Response |
 |---|---|---|
-| POST | `/v1/challenges` | `{session_id}` → `{challenge_id, seed, variant_id, duration_ms: 3000, expires_in_s: 120, path_version, presentation_version}` |
+| POST | `/v1/challenges` | `{session_id}` → `{challenge_id, seed, variant_id, duration_ms: 5000, expires_in_s: 120, path_version, presentation_version}` |
 | POST | `/v1/challenges/{id}/attempt` | Trail → `{result: ScoreResult, token: "tok_…" \| null, fallback: "pow" \| null}`. A red attempt needs `X-Lab-Key` and never gets a token. |
 | POST | `/v1/pow` | `{session_id}` → `{pow_id, nonce, bits, expires_in_s: 120}` |
 | POST | `/v1/pow/{id}/solve` | `{counter}` → `{token}` or 400 |
@@ -177,58 +158,22 @@ from engine.gate import gate             # gate(candidate:dict, baseline:dict,
  "what_changed": "added sub-movements; jitter now inside band", "evidence": ["att_91", "att_94"]}
 ```
 
-### Database tables (Person 1 owns them; listed here so Person 2 knows what exists)
-`challenges(id, session_id, seed, variant_id, created_at, expires_at, attempts)`,
-`attempts(id, challenge_id, cohort, device, nondominant_hand, round_id, features jsonb, score, pass, trail_key, created_at)`,
-`tokens(id, session_id, action, expires_at, consumed_at)`, `pow(id, session_id, nonce, bits, expires_at, solved_at)`,
-`reservations(id, session_id, token_id, created_at)`, `variants(id, config jsonb, status, created_at)`,
-`approvals(id, interrupt_id, variant_id, gate jsonb, status, decided_at)`, `gate_decisions(id, candidate, baseline, result jsonb, created_at)`,
-`lab_commands(id, kind, status, created_at)`, `lab_events(id, run_id, body jsonb, created_at)`.
+## Database state
 
-### Environment variables
+The schema in [web/schema.sql](../web/schema.sql) defines challenges, attempts,
+passes, reservations, variants, approvals, gate decisions, lab events/commands,
+and research enrollments/recordings. Challenges snapshot their issued policy;
+attempts retain path and presentation versions. Approval fingerprints bind the
+exact evidence. Research schema and consent are described in
+[model research](../engine/ml/README.md).
+
+## Environment variables
+
 | Var | Used by | Example |
 |---|---|---|
-| `DATABASE_URL` | P1 | `postgresql://…@…:…/defaultdb?sslmode=require` |
-| `S3_ENDPOINT`, `S3_BUCKET`, `S3_KEY`, `S3_SECRET` | P1 | `https://us-sea-1.linodeobjects.com`, `followit-trails` |
+| `DATABASE_URL` | app | `postgresql://…@…:…/defaultdb?sslmode=require` |
+| `S3_ENDPOINT`, `S3_BUCKET`, `S3_KEY`, `S3_SECRET` | app | `https://us-sea-1.linodeobjects.com`, `followit-trails` |
 | `LAB_KEY` | both | a random 32-char string |
-| `API_BASE` | P2 worker | `https://<your-domain>` (or `http://localhost:8000` against the devserver) |
-| `AKAMAI_BASE_URL`, `AKAMAI_API_KEY`, `MODEL_ID` | P2 | `https://ws.akamai-workshops.com/v1`, `hk_…`, `hackathon-chat` |
-| `USE_BEDROCK`, `AWS_BEARER_TOKEN_BEDROCK` | P2 | fallback only |
-
-### The biggest risk, said plainly: merging only at the end
-Two people working separately and merging at 7 AM is how teams demo nothing. The danger isn't git conflicts: you own separate folders, so those will be near zero. The danger is **two halves that each work alone and disagree on something small**: a coordinate scale, a field name, a timestamp origin, an SSE format. You'd find out at 7 AM with no time to fix it.
-
-**The cheapest fixes that keep your way of working:**
-1. **Integrate at deploy time, not in git.** From 11 PM, the VM builds from `p1-platform` plus the latest `engine/` folder copied from `p2-engine`. The deploy script does this (`git archive origin/p2-engine engine | tar -x`), and the copy is never committed. The live site then scores with the real engine, and Person 2's worker runs on the VM as a second container against the live API. Branches stay separate, but the system works together all night.
-2. **Shared fixtures and tests.** Both of you run `pytest contracts/`. Person 2's tests check the engine against the fixtures. Person 1's tests check that the API returns fixture-shaped JSON.
-3. **One adapter file.** Person 1 calls engine functions only through `web/engine_adapter.py`. It does `try: from engine… except ImportError: use stubs`. The merge flips it to real code with zero edits.
-4. **Two throwaway trial merges, at 11 PM and 2 AM** (15 minutes each, below). Merge both branches into a scratch branch, run tests, start the app locally, play one comet, then **delete the scratch branch**. `main` stays untouched until the end.
-5. **The final merge at 6:00 AM, not 7:45.** That leaves two hours to fix whatever it breaks.
-
-### Trial merge (11 PM and 2 AM, either person runs it)
-```bash
-git fetch origin
-git switch -c try-merge origin/p1-platform
-git merge --no-edit origin/p2-engine          # should be conflict-free; if not, someone edited the other's folder
-pip install -r web/requirements.txt -r engine/requirements.txt
-pytest contracts/ engine/tests web/tests
-uvicorn web.app:app --port 8000 &        # open /, play one comet, confirm the score has real feature values (not stub)
-python -m engine.worker --once red            # one red round against localhost
-git switch - && git branch -D try-merge       # throw it away
-```
-
-### Changing the contract after 5:30
-Avoid it. If you must: message the other person first, then **Person 2** makes the change in `contracts/` as a single commit with a line in `CHANGELOG.md`. Person 1 runs `git cherry-pick <that commit>`. Never edit `contracts/` on `p1-platform` directly.
-
-### Final merge checklist (start at 6:00 AM)
-- [ ] Both branches pushed. Both `pytest` runs are green on their own branch.
-- [ ] `git switch main && git merge p1-platform && git merge p2-engine`, with no conflicts outside `contracts/` (if there are any in `contracts/`, take Person 2's version).
-- [ ] `engine_adapter.py` logs `using real engine` on startup, not `using stubs`.
-- [ ] `pytest contracts/ engine/tests web/tests` passes on `main`.
-- [ ] Deploy `main` to the VM (`docker compose up -d --build`), then **hard refresh** the browser.
-- [ ] On the live site: play the comet on a phone (score shows 5 real features), reserve a ticket, and check a reused token returns 409.
-- [ ] Skip → PoW → reserve works with the keyboard only.
-- [ ] `/lab`: Run Red (events stream), Run Blue (gate result appears), Approve (variant activates), Reset.
-- [ ] The concurrency test prints `1 success, 19 rejected`.
-- [ ] Record the backup run (labelled REPLAY). Write the README. Submit by 8:00.
-- [ ] **If the merge breaks and can't be fixed by 7:00, redeploy the 11 PM setup (`p1-platform` + `engine/` copied from `p2-engine` at deploy time) and demo that.** It has been running all night, so it's your safest build.
+| `API_BASE` | worker | `https://<your-domain>` (or `http://localhost:8000` against the devserver) |
+| `AKAMAI_BASE_URL`, `AKAMAI_API_KEY`, `MODEL_ID` | worker | `https://ws.akamai-workshops.com/v1`, `hk_…`, `hackathon-chat` |
+| `USE_BEDROCK`, `AWS_BEARER_TOKEN_BEDROCK` | worker | explicitly configured optional provider |

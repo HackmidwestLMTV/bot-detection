@@ -29,7 +29,7 @@ def client():
 
 
 @pytest.mark.skipif(engine_adapter.USING_STUBS, reason="real versioned scorer required")
-@pytest.mark.parametrize("issued_version,next_version", [("v1", "smooth_v2"), ("smooth_v2", "v1")])
+@pytest.mark.parametrize("issued_version,next_version", [("v1", "smooth_v2"), ("smooth_v2", "roaming_v3"), ("roaming_v3", "v1")])
 def test_challenge_pins_path_for_scoring_evidence_and_storage(client, monkeypatch, issued_version, next_version):
     monkeypatch.setattr(config, "PATH_VERSION", issued_version)
     challenge = client.post("/v1/challenges", headers=LAB, json={"session_id": uuid4().hex}).json()

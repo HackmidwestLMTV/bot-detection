@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ON THE VM: bash ~/followit/deploy.sh [engine]
-# RELEASE_REF selects one reviewed integrated revision (default origin/p2).
+# RELEASE_REF selects one reviewed integrated revision (default origin/main).
 # ENGINE_REF is an optional, explicit engine-only override for integration testing.
 set -euo pipefail
 umask 077
@@ -14,7 +14,7 @@ if [ -n "${RELEASE_REF:-}" ] && [ -n "${BRANCH:-}" ]; then
   echo 'Set RELEASE_REF or the legacy BRANCH override, not both.' >&2
   exit 2
 fi
-release_ref="${RELEASE_REF:-origin/${BRANCH:-p2}}"
+release_ref="${RELEASE_REF:-origin/${BRANCH:-main}}"
 # Resolve once: all files come from the same immutable revision even if a ref moves.
 release_commit=$(git rev-parse --verify --end-of-options "$release_ref^{commit}")
 git cat-file -e "$release_commit:compose.yaml"

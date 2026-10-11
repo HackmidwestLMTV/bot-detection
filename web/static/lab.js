@@ -1,7 +1,7 @@
 // Follow It · Lab dashboard. Vanilla ES module. Pure helpers are exported for node tests.
 
 const AGENTS = {
-  red: { icon: "🔴", name: "Red", role: "forges a human hand" },
+  red: { icon: "🔴", name: "Red", role: "tests synthetic pointer traces" },
   blue: { icon: "🔵", name: "Blue", role: "writes a tougher rule" },
   gate: { icon: "⚖️", name: "Gate", role: "measures the cost" },
   system: { icon: "⚙️", name: "System", role: "" },
@@ -11,10 +11,10 @@ const DEVICE_ORDER = ["mouse", "trackpad", "touch"];
 // Plain-language names for the agents' tools. The raw tool name is still printed on the
 // detail line, so nothing is hidden -- the headline is just readable from across a room.
 const TOOL_PLAIN = {
-  forge_and_submit: "Submits a forged hand",
+  forge_and_submit: "Submits a synthetic pointer trace",
   get_active_variant: "Reads the rule that is live",
   get_forgeries: "Reads the stored bot attempts",
-  get_human_stats: "Reads the stored human recordings",
+  get_human_stats: "Reads human movement summary statistics",
   propose_variant: "Writes a tougher rule",
   run_gate: "Sends the rule to the gate",
   activate_variant: "Asks to make the rule live",
@@ -22,6 +22,21 @@ const TOOL_PLAIN = {
 
 const num = (v) => (typeof v === "number" ? String(Math.round(v * 1000) / 1000) : String(v));
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** Server event time, never receipt time: reconnects/replays keep their original date. */
+export function formatTimestamp(ts, { locale, timeZone } = {}) {
+  const date = new Date(typeof ts === "number" && Number.isFinite(ts) ? ts * 1000 : NaN);
+  if (!Number.isFinite(date.getTime())) return { label: "Time unavailable", title: "This event has no valid recorded timestamp", dateTime: "" };
+  return {
+    label: date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZone }),
+    title: date.toLocaleString(locale, { dateStyle: "full", timeStyle: "long", timeZone }),
+    dateTime: date.toISOString(),
+  };
+}
+
+export function stampedMessage(message, ts = Date.now() / 1000) {
+  return message ? `[${formatTimestamp(ts).label}] ${message}` : "";
+}
 
 /** Variant ids are 36 characters of hex. Show enough to tell two apart; keep the rest in a title. */
 export function shortId(id) {
@@ -141,9 +156,10 @@ export function formatEvent(ev, ctx) {
   const a = AGENTS[ev.agent] || { icon: "•", name: String(ev.agent || "?"), role: "" };
   const d = ev.data || {};
   const base = ev.agent === "red" || ev.agent === "blue" ? ev.agent : "";
+  const timestamp = formatTimestamp(ev.ts);
   const out = (cls, head, detail) => ({
-    cls, icon: a.icon, who: a.name, head, detail: detail || "",
-    text: [`${a.icon} ${a.name}`, head, detail].filter(Boolean).join(" · "),
+    cls, icon: a.icon, who: a.name, head, detail: detail || "", timestamp,
+    text: [`[${timestamp.label}] ${a.icon} ${a.name}`, head, detail].filter(Boolean).join(" · "),
   });
 
   switch (ev.type) {
@@ -181,7 +197,7 @@ export function formatEvent(ev, ctx) {
       return out("gate wait", "🟡 A person has to decide",
         `${shortId(d.variant_id)} is waiting for approval · ${d.approval_id}`);
     case "round_report":
-      return out("report", `${a.name} round ${d.round ?? "?"}: ${d.passed} of ${d.attempts} forgeries passed`,
+      return out("report", `${a.name} round ${d.round ?? "?"}: ${d.passed} of ${d.attempts} ${ev.agent === "blue" ? "proposals activated" : "forgeries passed"}`,
         d.what_changed ?? "");
     case "variant_activated":
       return out("live", "✅ A new rule is live",
@@ -266,7 +282,7 @@ function boot() {
 
   if (replay) $("replay-banner").hidden = false;
 
-  const toast = (m) => { $("toast").textContent = m || ""; };
+  const toast = (m) => { $("toast").textContent = stampedMessage(m); };
   const getKey = () => { try { return localStorage.getItem("followit_lab_key"); } catch { return null; } };
   const setKey = (k) => { try { k ? localStorage.setItem("followit_lab_key", k) : localStorage.removeItem("followit_lab_key"); } catch { /* ignore */ } };
 
@@ -336,12 +352,21 @@ function boot() {
     const stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
     const div = document.createElement("div");
     div.className = "line " + (entry.cls || "");
+    const meta = document.createElement("span");
+    meta.className = "line-meta";
     if (entry.icon) {
       const who = document.createElement("span");
       who.className = "line-who";
       who.textContent = `${entry.icon} ${entry.who}`;
-      div.appendChild(who);
+      meta.appendChild(who);
     }
+    const time = document.createElement("time");
+    time.className = "line-time";
+    time.textContent = entry.timestamp.label;
+    time.title = entry.timestamp.title;
+    if (entry.timestamp.dateTime) time.dateTime = entry.timestamp.dateTime;
+    meta.appendChild(time);
+    div.appendChild(meta);
     const body = document.createElement("span");
     body.className = "line-body";
     if (entry.head) {
@@ -450,7 +475,7 @@ function boot() {
   function syncDecisionFlag() {
     $("dec-flag").hidden = pendingCount() === 0;
   }
-  function showApproval(d) {
+  function showApproval(d, ts) {
     if (state.approvals.has(d.approval_id)) return;
     const dec = $("decision");
     if (!state.approvals.size) dec.textContent = "";
@@ -460,6 +485,13 @@ function boot() {
     flag.className = "card-flag";
     flag.textContent = "DECISION REQUIRED";
     card.appendChild(flag);
+    const requested = document.createElement("time");
+    const stamp = formatTimestamp(ts);
+    requested.className = "decision-time";
+    requested.textContent = `Recorded ${stamp.label}`;
+    requested.title = stamp.title;
+    if (stamp.dateTime) requested.dateTime = stamp.dateTime;
+    card.appendChild(requested);
     const h = document.createElement("h3");
     h.textContent = `Approve ${shortId(d.variant_id)}?`;
     h.title = d.variant_id || "";
@@ -482,7 +514,7 @@ function boot() {
     if (replay) {
       ok.disabled = no.disabled = true;
       entry.decided = true;
-      out.textContent = "Recorded decision · controls disabled";
+      out.textContent = stampedMessage("Recorded decision · controls disabled", ts);
       flag.textContent = "RECORDED DECISION";
       syncDecisionFlag();
       return;
@@ -490,19 +522,19 @@ function boot() {
     syncDecisionFlag();
     const decide = async (approve) => {
       ok.disabled = no.disabled = true; entry.decided = true; syncDecisionFlag();
-      out.textContent = "Sending…"; out.className = "outcome";
+      out.textContent = stampedMessage("Sending…"); out.className = "outcome";
       try {
         await api("POST", `/v1/lab/approvals/${encodeURIComponent(d.approval_id)}/decide`, { approve });
         setOutcome(d.approval_id, approve);
       } catch (e) {
         ok.disabled = no.disabled = false; entry.decided = false; syncDecisionFlag();
-        out.textContent = "Failed: " + (e.message || e); out.className = "outcome bad";
+        out.textContent = stampedMessage("Failed: " + (e.message || e)); out.className = "outcome bad";
       }
     };
     ok.addEventListener("click", () => decide(true));
     no.addEventListener("click", () => decide(false));
     ok.disabled = no.disabled = true;
-    out.textContent = "Checking decision status…";
+    out.textContent = stampedMessage("Checking decision status…");
     api("GET", `/v1/lab/approvals/${encodeURIComponent(d.approval_id)}`).then((approval) => {
       if (entry.decided) return;
       if (approval?.status === "approved" || approval?.status === "denied") {
@@ -511,20 +543,20 @@ function boot() {
         ok.disabled = no.disabled = false;
         out.textContent = "";
       } else {
-        out.textContent = "Decision unavailable. Refresh the lab before continuing.";
+        out.textContent = stampedMessage("Decision unavailable. Refresh the lab before continuing.");
       }
     }).catch(() => {
       // An activation that already landed is the decision; don't overwrite it with a probe failure.
       if (entry.decided) return;
-      out.textContent = "Unable to verify this decision. Reconnect to continue.";
+      out.textContent = stampedMessage("Unable to verify this decision. Reconnect to continue.");
     });
   }
-  function setOutcome(id, approved) {
+  function setOutcome(id, approved, ts = Date.now() / 1000) {
     const e = state.approvals.get(id);
     if (!e) return;
     e.decided = true;
     e.ok.disabled = e.no.disabled = true;
-    e.out.textContent = approved ? "✔ Approved" : "✘ Denied";
+    e.out.textContent = stampedMessage(approved ? "✔ Approval confirmed" : "✘ Denial confirmed", ts);
     e.out.className = "outcome " + (approved ? "ok" : "bad");
     e.card.classList.add("decided");
     const flag = e.card.querySelector(".card-flag");
@@ -545,13 +577,13 @@ function boot() {
       state.gateChips.push(chip);
       state.gates.push(d);
       renderProvenance(); renderCmp(); refreshVariants();
-    } else if (ev.type === "approval_needed") showApproval(d);
+    } else if (ev.type === "approval_needed") showApproval(d, ev.ts);
     else if (ev.type === "variant_activated") {
       state.activeId = d.variant_id;
       const tile = $("metric-variant").closest(".metric");
       if (tile) { tile.classList.remove("just-changed"); void tile.offsetWidth; tile.classList.add("just-changed"); }
       renderCmp(); refreshVariants();
-      if (d.approval_id) { showApproval({ approval_id: d.approval_id, variant_id: d.variant_id, gate: {} }); setOutcome(d.approval_id, true); }
+      if (d.approval_id) { showApproval({ approval_id: d.approval_id, variant_id: d.variant_id, gate: {} }, ev.ts); setOutcome(d.approval_id, true, ev.ts); }
     }
   }
 

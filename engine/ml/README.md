@@ -8,26 +8,28 @@ trained locally. Raw research sequences are never included in agent prompts.
 
 ## What is measured
 
-`target_response_v1` adds target-conditioned error, velocity alignment, lag-fit
+`target_response_v2` adds target-conditioned error, velocity alignment, lag-fit
 improvement against unrelated paths, consistency across time windows, timing
 quality, speed, acceleration/jerk proxies and turning statistics to the existing
 five features. These describe browser pointer events, not measured physiology.
 No universal tremor, entropy, fatigue, or mouse-vs-trackpad rule is assumed.
 
-Sequences have 181 time steps at 60 Hz and eight channels: cursor velocity x/y,
+Sequences have 301 time steps at 60 Hz and eight channels: cursor velocity x/y,
 target-relative error x/y, target velocity x/y, cursor speed, and a validity mask.
 Coordinates are normalized by the logical 600×400 canvas. Native event times
 remain in the signed recording; gaps over 100 ms and unsupported derivative
 windows are masked, not filled with invented observations. At least 40 events,
-2.5 seconds of coverage and 85% grid support are required for model evaluation.
+4.5 seconds of coverage and 85% grid support are required for model evaluation.
 Excluded trials appear in the report; insufficient coverage is not a bot label.
 
 ## Collect fresh evidence
 
 The operator page at `/research` can create participant links and phone QR codes.
-Enter the existing lab key there, choose **New person** for each new participant,
-and retain the same pseudonymous ID when creating their next device/session invite.
-The key is held only in page memory and sent in `X-Lab-Key`; never share it.
+Enter the existing lab key and choose **Invite: mouse**, **Invite: trackpad**, or
+**Invite: phone / touch** for each new participant. Use **Same person again, or a
+specific ID** to retain their pseudonymous ID across devices and sessions.
+The key is sent in `X-Lab-Key` and held in page memory, or tab session storage
+when the operator selects the optional remember setting; never share it.
 Only share the participant invitation. Its code travels in a URL fragment, which
 is removed after the form is prefilled. Consent is always unchecked on entry.
 Ask for 3–5 natural attempts per device, including misses, and refresh the coverage

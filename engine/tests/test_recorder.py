@@ -35,10 +35,10 @@ def test_recorder_consent_unique_save_and_no_implicit_persistence(tmp_path):
     trace = json.loads((folder / saved["filename"]).read_text())
     assert trace["tester"] == {"consent": True, "nondominant_hand": True}
     assert trace["cohort"] == "human_test" and trace["device"] == "mouse"
-    assert trace["path_version"] == "smooth_v2"
-    assert trace["presentation_version"] == "plain_ring_v1"
+    assert trace["path_version"] == "roaming_v3"
+    assert trace["presentation_version"] == "plain_ring_5s_v2"
     assert attempt["result"]["features"]["err_mean_px"]["value"] < 1e-9
-    assert "seed" in trace and len(trace["samples"]) == 181
+    assert "seed" in trace and len(trace["samples"]) == 301
     second = submit(client)
     next_saved = client.post("/dev/recordings", json={"attempt_id": second["attempt_id"], "consent": True}).json()
     assert saved["filename"] != next_saved["filename"]
@@ -52,7 +52,7 @@ def test_expiration_and_bad_attempts(tmp_path):
     payload = {"challenge_id": challenge["challenge_id"], "samples": [[0, 1, 2], [500, 2, 3]],
                "device": "touch", "pointer_type": "touch", "presentation_version": challenge["presentation_version"]}
     assert client.post("/dev/attempts", json=payload).status_code == 400
-    payload["samples"] = [[0, 1, 2], [3001, 2, 3]]
+    payload["samples"] = [[0, 1, 2], [5001, 2, 3]]
     assert client.post("/dev/attempts", json=payload).status_code == 400
     payload["samples"] = [[0, 1, 2], [3000, 2, 3]]
     now[0] = 121

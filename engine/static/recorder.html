@@ -34,17 +34,17 @@
 </style>
 <header class="site-header"><span class="brand"><span class="brand-mark" aria-hidden="true"></span>Follow It</span><span class="eyebrow">Movement lab</span></header>
 <main>
-<span class="eyebrow">Your movement. Three seconds.</span>
+<span class="eyebrow">Your movement. Five seconds.</span>
 <h1>A little motion.<br>A human moment.</h1>
-<p class="intro">Touch or point at the ball, then follow it for three seconds. The wide ring stays visible around your finger.</p>
+<p class="intro">Touch or point at the ball, then follow it for five seconds. The wide ring stays visible around your finger.</p>
 <div class="recorder">
 <div class="controls"><label>Input device <select id="device"><option value="mouse">Mouse</option><option value="trackpad">Trackpad</option><option value="touch">Touchscreen</option></select></label>
 <button id="new" disabled>New recording</button>
 </div>
 <p id="status" role="status" aria-live="polite">Loading the ball path…</p>
-<canvas id="trail" width="600" height="400" aria-label="Touch or point at the ball, then follow it for three seconds"></canvas>
+<canvas id="trail" width="600" height="400" aria-label="Touch or point at the ball, then follow it for five seconds"></canvas>
 <div class="progress" aria-hidden="true"><div id="progress"></div></div>
-<div class="guide"><span>Keep contact · follow the centre</span><span>3 seconds</span></div>
+<div class="guide"><span>Keep contact · follow the centre</span><span>5 seconds</span></div>
 <section id="results" hidden>
   <h2 id="score"></h2>
   <div class="table-wrap"><table><thead><tr><th>Feature</th><th>Value</th><th>Band</th><th>Result</th></tr></thead><tbody id="features"></tbody></table></div>
@@ -58,13 +58,13 @@
 <p class="muted">Local movement trial · provisional scoring. A pass does not prove someone is human. Nothing is saved unless you consent and choose Save recording.</p>
 </main>
 <script type="module">
-import { drawTarget, targetGeometry, PRESENTATION_VERSION } from '/dev/comet-target.js?v=plain_ring_v1';
+import { drawTarget, targetGeometry, PRESENTATION_VERSION } from '/dev/comet-target.js?v=plain_ring_5s_v2';
 const el = id => document.getElementById(id);
 const canvas = el('trail'), ctx = canvas.getContext('2d');
 const dpr = Math.min(window.devicePixelRatio || 1, 3);
 canvas.width = 600 * dpr; canvas.height = 400 * dpr;
 ctx.setTransform(dpr,0,0,dpr,0,0);
-let makePath, challenge, path, samples = [], started = null, pointerId = null, last = null, active = false, attemptId = null;
+let makePath, DURATION_MS, challenge, path, samples = [], started = null, pointerId = null, last = null, active = false, attemptId = null;
 let device, pointerType, frame;
 async function api(route, body) {
   const response = await fetch(route, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
@@ -89,7 +89,7 @@ function cancel(reason) {
   active=false; challenge=null; cancelAnimationFrame(frame); el('new').disabled=false; el('device').disabled=false; message(reason);
 }
 async function finish() {
-  active=false; samples.push([3000,...last]); const challengeId=challenge.challenge_id; challenge=null;
+  active=false; samples.push([DURATION_MS,...last]); const challengeId=challenge.challenge_id; challenge=null;
   message('Scoring your movement…');
   try {
     const data=await api('/dev/attempts',{challenge_id:challengeId,samples,device,pointer_type:pointerType,presentation_version:PRESENTATION_VERSION});
@@ -109,14 +109,14 @@ async function finish() {
 }
 function tick() {
   if(!active) return;
-  const t=Math.min(3000,performance.now()-started); draw(t);
-  if(t>=3000) { finish(); return; }
+  const t=Math.min(DURATION_MS,performance.now()-started); draw(t);
+  if(t>=DURATION_MS) { finish(); return; }
   frame=requestAnimationFrame(tick);
 }
 el('new').onclick=async () => {
   el('new').disabled=true; el('results').hidden=true; el('consent').checked=false;
   el('nondominant').checked=false; el('save').disabled=true; el('save-state').textContent=''; attemptId=null; samples=[];
-  try { challenge=await api('/dev/challenges',{}); if(challenge.presentation_version!==PRESENTATION_VERSION) { challenge=null; throw new Error('The recorder display changed. Reload before recording.'); } path=makePath(challenge.seed,challenge.path_version||'v1'); draw(); message('Touch or point at the ball, then follow it for three seconds. Keep your finger down on touchscreens.'); }
+  try { challenge=await api('/dev/challenges',{}); if(challenge.presentation_version!==PRESENTATION_VERSION) { challenge=null; throw new Error('The recorder display changed. Reload before recording.'); } path=makePath(challenge.seed,challenge.path_version||'v1'); draw(); message('Touch or point at the ball, then follow it for five seconds. Keep your finger down on touchscreens.'); }
   catch(error) { message(error.message); el('new').disabled=false; }
 };
 canvas.onpointerdown=event => {
@@ -133,12 +133,12 @@ canvas.onpointermove=event => {
   if(!active || event.pointerId!==pointerId) return;
   const events=event.getCoalescedEvents?.() || [];
   for(const sample of events.length ? events : [event]) {
-    const t=Math.max(0,Math.min(3000,sample.timeStamp-started));
+    const t=Math.max(0,Math.min(DURATION_MS,sample.timeStamp-started));
     if(t < samples[samples.length-1][0]) continue;
     last=position(sample); samples.push([t,...last]);
   }
 };
-canvas.onpointerup=event => { if(active && event.pointerId===pointerId && pointerType!=='mouse') cancel('Contact ended early. Choose New recording and keep contact for three seconds.'); };
+canvas.onpointerup=event => { if(active && event.pointerId===pointerId && pointerType!=='mouse') cancel('Contact ended early. Choose New recording and keep contact for five seconds.'); };
 canvas.onpointercancel=() => { if(active) cancel('Recording interrupted. Choose New recording to retry.'); };
 document.onvisibilitychange=() => { if(document.hidden && active) cancel('Recording interrupted because the page was hidden. Please retry.'); };
 el('consent').onchange=() => { el('save').disabled=!el('consent').checked || !attemptId; };
@@ -152,7 +152,7 @@ el('save').onclick=async () => {
 if (navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches) el('device').value='touch';
 draw();
 window.addEventListener('resize', () => { if(!active) draw(); });
-try { ({makePath}=await import('/dev/path.js')); el('new').disabled=false; message('Choose your input device, then select New recording.'); }
+try { ({makePath,DURATION_MS}=await import('/dev/path.js')); el('new').disabled=false; message('Choose your input device, then select New recording.'); }
 catch { message('The comet path could not load. Run engine/prepare-recorder.ps1, then reload this page.'); }
 </script>
 </html>

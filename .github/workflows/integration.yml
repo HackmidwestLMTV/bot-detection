@@ -2,9 +2,9 @@ name: Integrated platform and engine
 
 on:
   pull_request:
-    branches: [main, p2, p1-platform]
+    branches: [main]
   push:
-    branches: [main, p2, p1-platform]
+    branches: [main]
 
 permissions:
   contents: read

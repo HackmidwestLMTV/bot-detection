@@ -15,7 +15,7 @@ umask 077
 
 FOLLOWIT_DIR="${FOLLOWIT_DIR:-$HOME/followit}"
 ENV_FILE="${FOLLOWIT_ENV:-$FOLLOWIT_DIR/.env}"
-release_ref="${RELEASE_REF:-origin/${BRANCH:-p2}}"
+release_ref="${RELEASE_REF:-origin/${BRANCH:-main}}"
 engine_ref="${ENGINE_REF:-$release_ref}"
 CONNECT_TIMEOUT="${PREFLIGHT_TIMEOUT:-8}"
 
@@ -538,7 +538,7 @@ if [ -d "$FOLLOWIT_DIR/.git" ]; then
     done
   else
     fail "RELEASE_REF $release_ref does not resolve"
-    hint "git ls-remote origin p2   should print a hash; the engine branch is 'p2', not 'p2-engine'"
+    hint "git ls-remote origin main should print the integrated release branch; check RELEASE_REF if overridden"
   fi
   engine_commit=$("${git_c[@]}" rev-parse --verify --end-of-options "$engine_ref^{commit}" 2>/dev/null)
   if [ -z "$engine_commit" ]; then
@@ -554,7 +554,7 @@ if [ -d "$FOLLOWIT_DIR/.git" ]; then
       hint "without the real engine, /lab Approve and the gate return 503 by design"
     fi
   else
-    fail "engine ref $engine_ref does not resolve (default is origin/p2)"
+    fail "engine ref $engine_ref does not resolve (default is origin/main)"
   fi
 else
   warn "no checkout at $FOLLOWIT_DIR; release revision not checked"

@@ -23,7 +23,7 @@ def variant():
 def trace(seed=1, device="mouse"):
     # Synthetic fixtures are written only under pytest tmp_path, never human_traces.
     return {"seed": seed, "samples": forge_trail(seed, lag_ms=200, noise_px=2, submove_hz=3),
-            "presentation_version": "plain_ring_v1",
+            "presentation_version": "plain_ring_5s_v2",
             "device": device, "pointer_type": "touch" if device == "touch" else "mouse",
             "cohort": "human_test", "round_id": None, "tester": {"consent": True}}
 
@@ -140,7 +140,7 @@ def test_red_hooks_enforce_tool_budgets_and_round_unlock():
 
 
 @pytest.mark.parametrize("round_number", [1, 3])
-@pytest.mark.parametrize("path_version", ["v1", "smooth_v2"])
+@pytest.mark.parametrize("path_version", ["v1", "smooth_v2", "roaming_v3"])
 def test_real_sdk_red_round_uses_http_and_corrects_fabricated_report(round_number, path_version):
     pytest.importorskip("openai")
     pytest.importorskip("strands")

@@ -9,6 +9,7 @@ import numpy as np
 from contracts.presentation import PRESENTATION_VERSION
 from contracts.research import digest, verify
 from engine.features_v2 import representation
+from engine.path import DEFAULT_PATH_VERSION
 from engine.scorer import score
 
 BASELINE = json.loads((Path(__file__).parents[2] / "contracts/fixtures/variant_v1.json").read_text())
@@ -27,7 +28,7 @@ def load(directory, key, *, allow_test=False, now=None):
         envelope = json.loads(path.read_bytes())
         r = verify(envelope, key, now=now, allow_test=allow_test)
         test_only = test_only or r["provenance"] == "test_fixture"
-        if r.get("path_version") != "smooth_v2" or r.get("presentation_version") != PRESENTATION_VERSION:
+        if r.get("path_version") != DEFAULT_PATH_VERSION or r.get("presentation_version") != PRESENTATION_VERSION:
             raise ValueError("legacy or incompatible presentation: " + path.name)
         source = r.get("source_group")
         if source is not None and source != r["group_id"]:

@@ -1,6 +1,9 @@
 # Versioned challenge motion
 
-The three-second challenge supports `v1` and `smooth_v2`. A missing `path_version`
+The five-second challenge supports `v1`, `smooth_v2`, and `roaming_v3`. New
+challenges and the local recorder default to `roaming_v3`, described in
+[ROAMING_PATH.md](ROAMING_PATH.md). This document preserves the `smooth_v2`
+definition used by older recordings. A missing `path_version`
 means `v1`, preserving existing fixtures and recordings. Python `make_path(seed,
 path_version="v1")` and JavaScript `makePath(seed, pathVersion = "v1")` share this
 default. Unsupported versions fail explicitly.
@@ -25,9 +28,9 @@ uses `variant.get("path_version", "v1")`; the API must supply the issued challen
 version rather than trusting client data or letting a later configuration change
 reinterpret the attempt.
 
-The local recorder issues `smooth_v2` by default and saves its version. Its existing
+The local recorder issues `roaming_v3` by default and saves its version. Its existing
 scoring bands remain provisional. Calibration selects only the baseline variant's
-version. The calibration CLI defaults to `smooth_v2` and `plain_ring_v1`; request
+version. The calibration CLI defaults to `roaming_v3` and `plain_ring_5s_v2`; request
 `--path-version v1 --presentation-version legacy` to audit historical recordings.
 It never pools motion/display populations. Residual transplantation subtracts
 the source recording's own version and adds the requested target version.

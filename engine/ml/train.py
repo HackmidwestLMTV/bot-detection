@@ -9,6 +9,7 @@ import numpy as np
 from contracts.presentation import PRESENTATION_VERSION
 from contracts.research import DEVICES, FEATURE_VERSION, canonical, digest
 from engine.features_v2 import CHANNELS, FEATURE_NAMES
+from engine.path import DEFAULT_PATH_VERSION
 from .artifact import Artifact, file_hash
 from .dataset import load, normalization, split, transform
 
@@ -123,7 +124,7 @@ def compare(data, output, *, epochs=15, held_out_family=None):
         manifest = {"schema": "movement_model_v1", "mode": "shadow_only", "kind": kind,
                     "test_only": data["test_only"], "feature_version": FEATURE_VERSION,
                     "features": list(FEATURE_NAMES), "channels": list(CHANNELS),
-                    "path_version": "smooth_v2", "presentation_version": PRESENTATION_VERSION,
+                    "path_version": DEFAULT_PATH_VERSION, "presentation_version": PRESENTATION_VERSION,
                     "threshold": threshold, "normalization": norm, "dataset_fingerprint": data["fingerprint"],
                     "split_fingerprint": split_fingerprint, "held_out_family": held_out_family,
                     "training": {"seed": 42, "epochs": epochs if kind != "rf" else None,

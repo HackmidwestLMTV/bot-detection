@@ -12,8 +12,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, StrictBool
 
 from engine.scorer import normalize_samples, score
-from engine.path import PATH_VERSIONS
-from contracts.presentation import PRESENTATION_VERSION
+from engine.path import DEFAULT_PATH_VERSION, PATH_VERSIONS
+from contracts.presentation import DURATION_MS, PRESENTATION_VERSION
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -32,7 +32,7 @@ class SaveRecording(BaseModel):
     nondominant_hand: StrictBool = False
 
 
-def create_app(*, traces_dir=None, path_js=None, clock=time.monotonic, path_version="smooth_v2"):
+def create_app(*, traces_dir=None, path_js=None, clock=time.monotonic, path_version=DEFAULT_PATH_VERSION):
     if path_version not in PATH_VERSIONS:
         raise ValueError("unsupported path_version")
     app = FastAPI(title="Follow It local recorder")
@@ -81,7 +81,7 @@ def create_app(*, traces_dir=None, path_js=None, clock=time.monotonic, path_vers
         challenges[challenge_id] = {"seed": seed, "path_version": path_version,
                                     "presentation_version": PRESENTATION_VERSION, "expires": clock() + 120}
         return {"challenge_id": challenge_id, "seed": seed, "path_version": path_version,
-                "duration_ms": 3000, "expires_in_s": 120, "presentation_version": PRESENTATION_VERSION}
+                "duration_ms": DURATION_MS, "expires_in_s": 120, "presentation_version": PRESENTATION_VERSION}
 
     @app.post("/dev/attempts")
     def attempt(body: Attempt):
@@ -93,8 +93,8 @@ def create_app(*, traces_dir=None, path_js=None, clock=time.monotonic, path_vers
             raise HTTPException(409, "recorder display changed or unavailable; reload before recording")
         try:
             samples = normalize_samples(body.samples)
-            if samples[-1, 0] > 3000:
-                raise ValueError("recordings must stay inside the three-second challenge")
+            if samples[-1, 0] > DURATION_MS:
+                raise ValueError("recordings must stay inside the five-second challenge")
             result = score(samples.tolist(), challenge["seed"], variant)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc

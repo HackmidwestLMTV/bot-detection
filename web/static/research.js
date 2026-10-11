@@ -3,9 +3,9 @@ const $ = id => document.getElementById(id);
 const TARGET = 10;
 const LABELS = { mouse: 'Mouse', trackpad: 'Trackpad', touch: 'Phone / touch' };
 const SAY = {
-  mouse: 'Open this on your laptop, then follow the ball with your mouse for three seconds.',
-  trackpad: 'Open this on your laptop and use the trackpad — follow the ball for three seconds.',
-  touch: 'Scan this, follow the ball with your finger for three seconds.',
+  mouse: 'Open this on your laptop, then follow the ball with your mouse for five seconds.',
+  trackpad: 'Open this on your laptop and use the trackpad — follow the ball for five seconds.',
+  touch: 'Scan this, follow the ball with your finger for five seconds.',
 };
 const KEY_STORE = 'followit_operator_key';
 let inviteUrl = '';

@@ -21,7 +21,7 @@ def recording(seed=42, group="person_0001", label="human", family="lagged_noise"
             "participant_id": group, "consent": CONSENT_VERSION, "label": label, "provenance": "test_fixture",
             "attack_family": family, "device": "mouse", "collector_version": COLLECTOR_VERSION,
             "collected_at": now, "expires_at": now + RETENTION_S, "seed": seed,
-            "path_version": "smooth_v2", "presentation_version": "plain_ring_v1", "samples": samples(seed, family)}
+            "path_version": "roaming_v3", "presentation_version": "plain_ring_5s_v2", "samples": samples(seed, family)}
 
 
 def test_signed_provenance_tampering_expiry_and_fixture_exclusion():
@@ -50,9 +50,9 @@ def test_target_response_distinguishes_unrelated_wave_and_masks_long_gaps():
     rep = representation(sparse, 42)
     assert rep["quality"]["eligible"] is False
     assert np.all(rep["sequence"][60:110] == 0)
-    assert rep["sequence"].shape == (181, 8) and len(rep["vector"]) == 25
+    assert rep["sequence"].shape == (301, 8) and len(rep["vector"]) == 25
     with pytest.raises(ValueError):
-        representation([[0, 1, 1], [3001, 2, 2]], 42)
+        representation([[0, 1, 1], [5001, 2, 2]], 42)
 
 
 def test_dataset_rejects_legacy_duplicates_and_source_leakage(tmp_path):
@@ -64,7 +64,12 @@ def test_dataset_rejects_legacy_duplicates_and_source_leakage(tmp_path):
     target.write_bytes(canonical(sign(r, KEY)))
     with pytest.raises(ValueError, match="legacy"):
         load(tmp_path, KEY, allow_test=True)
-    r["presentation_version"] = "plain_ring_v1"
+    r["presentation_version"] = "plain_ring_5s_v2"
+    r["path_version"] = "smooth_v2"
+    target.write_bytes(canonical(sign(r, KEY)))
+    with pytest.raises(ValueError, match="incompatible"):
+        load(tmp_path, KEY, allow_test=True)
+    r["path_version"] = "roaming_v3"
     r["source_group"] = "other_person"
     target.write_bytes(canonical(sign(r, KEY)))
     with pytest.raises(ValueError, match="source group"):

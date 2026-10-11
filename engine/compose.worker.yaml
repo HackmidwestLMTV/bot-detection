@@ -1,4 +1,4 @@
-# Combine with Person 1's compose.yaml after copying engine/ from origin/p2.
+# Optional worker override for the repository's integrated compose.yaml.
 services:
   worker:
     build:

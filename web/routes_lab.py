@@ -54,7 +54,7 @@ class VariantIn(BaseModel):
     @model_validator(mode="after")
     def _shape(self):
         if self.model_extra and "path_version" in self.model_extra:
-            if self.model_extra["path_version"] not in ("v1", "smooth_v2"):
+            if self.model_extra["path_version"] not in ("v1", "smooth_v2", "roaming_v3"):
                 raise ValueError("unknown path_version")
         names = {"lag_ms", "err_mean_px", "submoves_per_s", "jitter_px", "power_law_beta"}
         if set(self.features) != names:

@@ -37,7 +37,7 @@ def test_full_valid_configuration_and_extras_are_preserved():
     assert VariantIn.model_validate(cfg).model_dump() == cfg
 
 
-@pytest.mark.parametrize("version", ["v1", "smooth_v2"])
+@pytest.mark.parametrize("version", ["v1", "smooth_v2", "roaming_v3"])
 def test_supported_path_version_is_preserved(version):
     cfg = {**V1, "path_version": version}
     assert VariantIn.model_validate(cfg).model_dump() == cfg

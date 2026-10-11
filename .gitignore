@@ -16,3 +16,7 @@ person-2-engine.md
 # Local Claude Code tooling: machine-specific, never part of the project.
 .claude/
 skills-lock.json
+
+# Local planning notes and browser captures are not submission material.
+/tasks/
+/output/

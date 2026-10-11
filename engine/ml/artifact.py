@@ -8,6 +8,7 @@ import numpy as np
 from contracts.presentation import PRESENTATION_VERSION
 from contracts.research import FEATURE_VERSION, digest
 from engine.features_v2 import CHANNELS, FEATURE_NAMES, representation
+from engine.path import DEFAULT_PATH_VERSION
 from .dataset import transform
 
 
@@ -76,7 +77,7 @@ class Artifact:
         if (m.get("schema") != "movement_model_v1" or m.get("mode") != "shadow_only"
                 or m.get("feature_version") != FEATURE_VERSION or m.get("features") != list(FEATURE_NAMES)
                 or m.get("channels") != list(CHANNELS) or m.get("presentation_version") != PRESENTATION_VERSION
-                or m.get("path_version") != "smooth_v2" or m.get("kind") not in ("rf", "cnn", "lstm")
+                or m.get("path_version") != DEFAULT_PATH_VERSION or m.get("kind") not in ("rf", "cnn", "lstm")
                 or (m.get("test_only") is not False and not allow_test)):
             raise ValueError("incompatible or test-only model artifact")
         for name in ("dataset_fingerprint", "split_fingerprint"):

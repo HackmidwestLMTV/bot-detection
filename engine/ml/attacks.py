@@ -7,7 +7,7 @@ import numpy as np
 
 from contracts.presentation import PRESENTATION_VERSION
 from contracts.research import COLLECTOR_VERSION, RETENTION_S, SCHEMA, sign
-from engine.path import make_path
+from engine.path import DEFAULT_PATH_VERSION, DURATION_MS, make_path
 from .collect import write_private
 
 FAMILIES = ("open_loop_wave", "perfect_follow", "lagged_noise", "feedback_control")
@@ -15,8 +15,8 @@ FAMILIES = ("open_loop_wave", "perfect_follow", "lagged_noise", "feedback_contro
 
 def samples(seed, family):
     rng = np.random.default_rng(seed)
-    t = np.arange(0, 3001, 16, dtype=float)
-    path = make_path(seed, "smooth_v2")
+    t = np.append(np.arange(0, DURATION_MS, 16, dtype=float), DURATION_MS)
+    path = make_path(seed, DEFAULT_PATH_VERSION)
     target = np.asarray([path(float(x)) for x in t])
     if family == "open_loop_wave":
         # Same attack class as the successful drag experiment, not a recovered recording.
@@ -52,7 +52,7 @@ def generate(directory, key, *, groups=50, now=None):
                       "label": "bot", "provenance": "synthetic_generator_v1", "attack_family": family,
                       "collected_at": now, "expires_at": now + RETENTION_S,
                       "device": "mouse", "collector_version": COLLECTOR_VERSION,
-                      "seed": seed, "path_version": "smooth_v2", "presentation_version": PRESENTATION_VERSION,
+                      "seed": seed, "path_version": DEFAULT_PATH_VERSION, "presentation_version": PRESENTATION_VERSION,
                       "samples": samples(seed, family)}
             write_private(Path(directory) / (rid + ".json"), sign(record, key))
             count += 1

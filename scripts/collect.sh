@@ -140,10 +140,10 @@ if [ "$BIND" = "0.0.0.0" ]; then
   echo
 fi
 echo "Count what you have collected (run here, in another terminal):"
-echo "  $PYTHON -c \"import collections,glob,json;t=[json.load(open(f)) for f in glob.glob('$TRACES_DIR/*.json')];c=collections.Counter(x['device'] for x in t if x.get('path_version')=='smooth_v2');print(sum(c.values()),dict(c))\""
+echo "  $PYTHON -c \"import collections,glob,json;t=[json.load(open(f)) for f in glob.glob('$TRACES_DIR/*.json')];c=collections.Counter(x['device'] for x in t if x.get('path_version')=='roaming_v3' and x.get('presentation_version')=='plain_ring_5s_v2');print(sum(c.values()),dict(c))\""
 echo
 echo "Check the set is usable (reads only; changes no bands):"
-echo "  $PYTHON -m engine.calibrate --path-version smooth_v2 --traces $TRACES_DIR"
+echo "  $PYTHON -m engine.calibrate --path-version roaming_v3 --traces $TRACES_DIR"
 echo
-echo "Ctrl-C stops both servers. reviews/collection-guide.md has the words to say."
+echo "Ctrl-C stops both servers. engine/README.md explains consent and device coverage."
 wait

@@ -9,7 +9,7 @@ import time
 SCHEMA = "research_sequence_v1"
 CONSENT_VERSION = "movement_training_v1"
 COLLECTOR_VERSION = "pointer_v2"
-FEATURE_VERSION = "target_response_v1"
+FEATURE_VERSION = "target_response_v2"
 RETENTION_S = 72 * 3600
 DEVICES = ("mouse", "trackpad", "touch")
 ID = re.compile(r"^[A-Za-z0-9_-]{8,100}$")

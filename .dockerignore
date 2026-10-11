@@ -1,5 +1,9 @@
 .git
 release-artifacts
+baseline-health.json
+baseline-state.json
+deployment-info.txt
+rollback-image.yaml
 .env
 .env.*
 **/.env
@@ -26,3 +30,5 @@ tasks
 **/PHASE*.md
 **/phase*.md
 **/backup_run*.jsonl
+
+output

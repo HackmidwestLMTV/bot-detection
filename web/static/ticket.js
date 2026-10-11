@@ -1,6 +1,6 @@
 // Ticket page controller: session, API calls, comet -> attempt, PoW fallback, reserve, tester mode.
 import { makePath } from './path.js';
-import { runComet, drawStill, PRESENTATION_VERSION } from './comet.js?v=research_v1';
+import { runComet, drawStill, PRESENTATION_VERSION } from './comet.js?v=plain_ring_5s_v2';
 
 // Console check: makePath(42)(1000) must be [103.824, 209.568]
 window.makePath = makePath;

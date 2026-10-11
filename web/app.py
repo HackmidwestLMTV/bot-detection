@@ -89,7 +89,7 @@ def _qr_page(request: Request, *, tester: bool):
     url = f"{config.PUBLIC_URL or str(request.base_url).rstrip('/')}/" + ("?tester=1" if tester else "")
     heading = "Help calibrate Follow It" if tester else "Try Follow It"
     description = ("Share a movement recording with consent to help calibrate our provisional scoring rules."
-                   if tester else "Follow the ball for three seconds, then reserve a demo ticket. No payment is collected.")
+                   if tester else "Follow the ball for five seconds, then reserve a demo ticket. No payment is collected.")
     note = ("Raw recordings are kept for 72 hours. Choose your device and give consent before recording."
             if tester else "A keyboard-accessible browser check is also available. It adds computational friction, not proof of humanity.")
     svg = segno.make(url, error="m").svg_inline(scale=12, border=2, dark="#000", light="#fff")

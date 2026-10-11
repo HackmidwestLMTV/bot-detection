@@ -30,7 +30,7 @@ def client():
         yield client
 
 
-def insert_evidence(aid, cohort, values, presentation="plain_ring_v1"):
+def insert_evidence(aid, cohort, values, presentation="plain_ring_5s_v2"):
     db.exec("""INSERT INTO attempts(id, cohort, device, features, path_version, presentation_version)
                VALUES (%s, %s, 'mouse', %s, %s, %s)""",
             aid, cohort, db.Json(values), config.PATH_VERSION, presentation)
@@ -51,7 +51,7 @@ def test_legacy_display_is_not_current_human_or_attack_evidence(client):
         assert legacy not in {row["attempt_id"] for row in humans}
         assert legacy_red not in {row["attempt_id"] for row in client.get("/v1/lab/forgeries", headers=LAB).json()}
         health = client.get("/healthz").json()
-        assert health["presentation_version"] == "plain_ring_v1"
+        assert health["presentation_version"] == "plain_ring_5s_v2"
         assert health["human_traces"]["total"] == len(humans)
         assert health["excluded_legacy_human_traces"] >= 1
     finally:
@@ -79,9 +79,9 @@ def test_attempt_uses_issued_snapshot_and_server_display_even_after_reset(client
         "samples": [[0, 1, 2], [3000, 3, 4]], "device": "touch", "cohort": "human_test",
         "tester": {"consent": True}, "presentation_version": issued["presentation_version"]}).json()
     assert observed == [{**snapshot, "path_version": issued["path_version"]}]
-    assert saved[0]["presentation_version"] == "plain_ring_v1"
+    assert saved[0]["presentation_version"] == "plain_ring_5s_v2"
     row = db.one("SELECT presentation_version FROM attempts WHERE id=%s", result["attempt_id"])
-    assert row["presentation_version"] == "plain_ring_v1"
+    assert row["presentation_version"] == "plain_ring_5s_v2"
 
 
 @pytest.mark.skipif(engine_adapter.USING_STUBS, reason="real gate required")

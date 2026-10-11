@@ -1,6 +1,6 @@
 // Shared visual target. Coordinates and scoring stay at the centre of the ring.
 // CSS-sized geometry stays visible around a fingertip on a narrow phone canvas.
-export const PRESENTATION_VERSION = 'plain_ring_v1';
+export const PRESENTATION_VERSION = 'plain_ring_5s_v2';
 
 export function targetGeometry(cssWidth = 600) {
   const scale = 600 / Math.max(1, cssWidth);

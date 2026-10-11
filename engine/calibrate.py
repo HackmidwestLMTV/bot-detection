@@ -9,9 +9,9 @@ from pathlib import Path
 import numpy as np
 
 from engine.forger import forge_trail
-from engine.path import PATH_VERSIONS
+from engine.path import DEFAULT_PATH_VERSION, PATH_VERSIONS
 from engine.scorer import FEATURES, features, normalize_samples, score_features, validate_variant
-from contracts.presentation import LEGACY_PRESENTATION, PRESENTATION_VERSION
+from contracts.presentation import LEGACY_PRESENTATION, PRESENTATION_VERSION, PRESENTATION_DURATIONS
 
 ROOT = Path(__file__).resolve().parents[1]
 DEVICES = ("mouse", "trackpad", "touch")
@@ -31,7 +31,7 @@ def load_traces(folder, path_version="v1", presentation_version=PRESENTATION_VER
             if path_version is not None and version != path_version:
                 continue
             presentation = trace.get("presentation_version", LEGACY_PRESENTATION)
-            if presentation not in (LEGACY_PRESENTATION, PRESENTATION_VERSION):
+            if presentation not in PRESENTATION_DURATIONS:
                 raise ValueError("unsupported presentation_version")
             if presentation_version is not None and presentation != presentation_version:
                 continue
@@ -42,7 +42,7 @@ def load_traces(folder, path_version="v1", presentation_version=PRESENTATION_VER
             if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= 0xFFFFFFFF:
                 raise ValueError("invalid seed")
             samples = normalize_samples(trace["samples"])
-            if samples[-1, 0] > 3000:
+            if samples[-1, 0] > PRESENTATION_DURATIONS[presentation]:
                 raise ValueError("trace exceeds challenge duration")
             fingerprint = hashlib.sha256(json.dumps([version, presentation, seed, samples.tolist()]).encode()).hexdigest()
             if fingerprint in seen:
@@ -100,7 +100,8 @@ def calibration_report(folder, baseline, *, path_version=None, presentation_vers
     if failures:
         reasons.append("candidate still rejects recorded humans; inspect per-device failures")
     seeds = sorted({row["trace"]["seed"] for row in rows})
-    naive_passed = sum(score_features(features(forge_trail(seed, path_version=version), seed, version),
+    naive_passed = sum(score_features(features(forge_trail(seed, path_version=version,
+                                     duration_ms=PRESENTATION_DURATIONS[presentation_version]), seed, version),
                                      candidate)["pass"] for seed in seeds)
     if naive_passed:
         reasons.append(f"perfect-target baseline passes on {naive_passed} of {len(seeds)} recorded seeds")
@@ -116,8 +117,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--traces", type=Path, default=ROOT / "contracts/fixtures/human_traces")
     parser.add_argument("--variant", type=Path, default=ROOT / "contracts/fixtures/variant_v1.json")
-    parser.add_argument("--path-version", choices=PATH_VERSIONS, default="smooth_v2", help="Select a separate path cohort (default: smooth_v2)")
-    parser.add_argument("--presentation-version", choices=(LEGACY_PRESENTATION, PRESENTATION_VERSION),
+    parser.add_argument("--path-version", choices=PATH_VERSIONS, default=DEFAULT_PATH_VERSION, help="Select a separate path cohort (default: roaming_v3)")
+    parser.add_argument("--presentation-version", choices=tuple(PRESENTATION_DURATIONS),
                         default=PRESENTATION_VERSION, help="Select a display cohort; legacy is audit-only")
     args = parser.parse_args(argv)
     report = calibration_report(args.traces, json.loads(args.variant.read_text(encoding="utf-8")),

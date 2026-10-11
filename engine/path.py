@@ -2,9 +2,11 @@
 
 import math
 
+from contracts.presentation import DURATION_MS
+
 MASK = 0xFFFFFFFF
-DURATION_MS = 3000
-PATH_VERSIONS = ("v1", "smooth_v2")
+PATH_VERSIONS = ("v1", "smooth_v2", "roaming_v3")
+DEFAULT_PATH_VERSION = "roaming_v3"
 
 
 def mulberry32(seed):
@@ -26,6 +28,8 @@ def make_path(seed: int, path_version="v1"):
         raise ValueError("unsupported path_version")
     if path_version == "smooth_v2":
         return _smooth_path(seed)
+    if path_version == "roaming_v3":
+        return _roaming_path(seed)
     random = mulberry32(seed)
     components = []
     for amplitudes in ((130, 50, 20), (80, 35, 15)):
@@ -55,6 +59,33 @@ def make_path(seed: int, path_version="v1"):
             xy[0] += dx * smooth
             xy[1] += dy * smooth
         return min(max(xy[0], 30), 570), min(max(xy[1], 30), 370)
+
+    return pos
+
+
+def _roaming_path(seed):
+    """A seeded broad loop with gentle shape variation, without clipping.
+
+    The 6.2--6.6 second period covers over 3/4 of a loop in five seconds.
+    Bounds are x=84..516/y=84..316 including all harmonic/center offsets;
+    the derivative triangle bound gives speed <256 logical px/s. Randomized
+    phase, direction, axes and harmonics avoid a fixed start or repeated arc.
+    This deterministic public path provides variety, not secrecy from bots.
+    """
+    random = mulberry32(seed)
+    phase = random() * 2 * math.pi
+    direction = -1 if random() < .5 else 1
+    omega = direction * 2 * math.pi / (6.2 + .4 * random())
+    offset = math.pi / 2 + (random() - .5) * .4
+    ax, ay = 184 + 20 * random(), 94 + 12 * random()
+    cx, cy = 300 + (random() - .5) * 8, 200 + (random() - .5) * 4
+    hx, hy = 4 + 4 * random(), 4 + 4 * random()
+    px, py = random() * 2 * math.pi, random() * 2 * math.pi
+
+    def pos(t_ms):
+        theta = phase + omega * t_ms / 1000
+        return (cx + ax * math.sin(theta) + hx * math.sin(2 * theta + px),
+                cy + ay * math.sin(theta + offset) + hy * math.sin(2 * theta + py))
 
     return pos
 

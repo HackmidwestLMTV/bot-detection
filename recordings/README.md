@@ -1,23 +1,34 @@
-# Recordings
+# Recorded demonstration
 
-Event streams captured from `/v1/lab/stream` with `web/dev/record_events.py`, replayed with
-`web/dev/replay_events.py --file <path> --reset` and shown at `/lab?replay=1`.
+`rehearsal-synthetic-humans.jsonl` is a historical local run recorded on October 11,
+2026 against the real engine and Akamai inference: Red → Blue → gate → approval →
+activation. Its 14 human-side traces were **synthetic**. The recording demonstrates
+the control flow, not measured human impact or accuracy. It uses an older
+presentation and is not evidence for `roaming_v3` / `plain_ring_5s_v2`.
 
-## `rehearsal-synthetic-humans.jsonl`
+Label it **REPLAY / SYNTHETIC HUMAN EVIDENCE** whenever shown. Do not import its
+sample counts into current human calibration or research data.
 
-A **complete** model-driven cycle, recorded locally on 2026-10-11 against the real engine and
-the live Akamai model: Red round -> Blue round -> gate -> approval -> activation. 48 events,
-nothing missing (`gate_result`, `approval_needed` and `variant_activated` all present).
+## Play on a disposable local app
 
-Red went from score 0.0 with every enabled feature out of band to a full pass in 5 attempts
-and 6 model calls, driving `jitter_px` 32.2 -> 9.9 -> 6.7 -> 5.19. Blue then capped the upper
-bounds just above the human maxima and the gate approved it for review.
+Set the local app's `LAB_KEY` in the terminal environment, then:
 
-**Not demo-safe for the gate numbers.** The 14 human traces underlying it are SYNTHETIC --
-generated to give the gate something to measure, because there were zero real `smooth_v2`
-recordings. So its "humans rejected" figures say nothing about real people, and `phases.md`
-is explicit that synthetic data must not stand in for real evidence.
+```bash
+python -m web.dev.replay_events http://localhost:8000 \
+  --file recordings/rehearsal-synthetic-humans.jsonl --reset
+```
 
-Use it to show that the cycle works end to end, and say out loud that the human side is
-synthetic. Re-record once Phase C has real consented `smooth_v2` traces, and only then treat
-it as the stage fallback the runbook describes.
+Open `http://localhost:8000/lab?replay=1`. The replay banner is visible and approval
+controls are disabled. The command writes events and resets lab state: use a
+disposable database, never the live collection deployment.
+
+## Capture a new backup
+
+```bash
+python -m web.dev.record_events https://YOUR-HOST backup_run.jsonl
+```
+
+Run a real lab sequence while recording. Preserve its actual verdict, device
+coverage, path/presentation, and whether approval occurred. Keep runtime captures
+local. Only a fresh consented human sample can support human-impact claims for
+the current presentation.

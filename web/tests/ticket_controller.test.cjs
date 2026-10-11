@@ -61,7 +61,7 @@ function harness({ reduced = false, tester = false, manualWorker = false, route,
     location: { search: tester ? '?tester=1' : '', pathname: '/', hash }, URLSearchParams,
     crypto: webcrypto, Uint8Array, AbortController, DOMException,
     sessionStorage: { getItem: () => null, setItem() {} },
-    makePath: () => () => [100, 100], drawStill() {}, PRESENTATION_VERSION: 'plain_ring_v1',
+    makePath: () => () => [100, 100], drawStill() {}, PRESENTATION_VERSION: 'plain_ring_5s_v2',
     runComet: (_canvas, _seed, { signal, pathVersion }) => new Promise((resolve, reject) => {
       comets.push({ resolve, signal, pathVersion });
       signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
@@ -71,7 +71,7 @@ function harness({ reduced = false, tester = false, manualWorker = false, route,
       requests.push({ path, body });
       const custom = await route?.(path, body, requests);
       if (custom) return custom;
-      if (path === '/v1/challenges') return reply({ challenge_id: 'challenge-1', seed: 42, presentation_version: 'plain_ring_v1' });
+      if (path === '/v1/challenges') return reply({ challenge_id: 'challenge-1', seed: 42, presentation_version: 'plain_ring_5s_v2' });
       if (path.endsWith('/attempt')) return reply({ result: { score: 0 }, token: null });
       if (path === '/v1/pow') return reply({ pow_id: 'puzzle', nonce: 'test-nonce', bits: 8 });
       if (path.endsWith('/solve')) return reply({ token: 'valid-token' });
@@ -206,7 +206,7 @@ test('playing again clears the earlier pass until the new challenge succeeds', a
 
 test('tester follows the issued path version and sees real feature measurements', async () => {
   const h = harness({ tester: true, route: path => {
-    if (path === '/v1/challenges') return reply({ challenge_id: 'smooth-challenge', seed: 42, path_version: 'smooth_v2', presentation_version: 'plain_ring_v1' });
+    if (path === '/v1/challenges') return reply({ challenge_id: 'smooth-challenge', seed: 42, path_version: 'smooth_v2', presentation_version: 'plain_ring_5s_v2' });
     if (path.endsWith('/attempt')) return reply({ result: { score: .75, features: {
       lag_ms: { value: 200, enabled: true, ok: true },
       power_law_beta: { value: .33, enabled: false, ok: true },

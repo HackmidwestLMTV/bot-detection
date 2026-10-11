@@ -1,12 +1,13 @@
 import os
 
 # A display change needs fresh human evidence even when target motion is unchanged.
-from contracts.presentation import PRESENTATION_VERSION
+from contracts.presentation import DURATION_MS, PRESENTATION_VERSION
+from engine.path import DEFAULT_PATH_VERSION, PATH_VERSIONS
 
 # Challenge motion is an operator choice, never an AI-proposed scoring rule.
-PATH_VERSION = os.environ.get("PATH_VERSION", "smooth_v2")
-if PATH_VERSION not in ("v1", "smooth_v2"):
-    raise ValueError("PATH_VERSION must be v1 or smooth_v2")
+PATH_VERSION = os.environ.get("PATH_VERSION", DEFAULT_PATH_VERSION)
+if PATH_VERSION not in PATH_VERSIONS:
+    raise ValueError("PATH_VERSION must be v1, smooth_v2 or roaming_v3")
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:dev@localhost:5432/followit")
 LAB_KEY = os.environ.get("LAB_KEY", "dev-lab-key")
@@ -22,7 +23,6 @@ S3_SECRET = os.environ.get("S3_SECRET")
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "").rstrip("/")
 
 # Constants from contracts/CONTRACT.md
-DURATION_MS = 3000
 TOKEN_TTL_S = 120
 CHALLENGE_TTL_S = 120
 POW_TTL_S = 120

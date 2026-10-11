@@ -16,22 +16,22 @@ def variant():
 
 
 def test_calibration_never_counts_legacy_display_as_current(tmp_path):
-    legacy = {"seed": 42, "samples": forge_trail(42), "device": "mouse", "cohort": "human_test",
+    legacy = {"seed": 42, "samples": forge_trail(42, duration_ms=3000), "device": "mouse", "cohort": "human_test",
               "round_id": None, "tester": {"consent": True}}
     (tmp_path / "legacy.json").write_text(json.dumps(legacy))
-    (tmp_path / "current.json").write_text(json.dumps({**legacy, "presentation_version": "plain_ring_v1"}))
+    (tmp_path / "current.json").write_text(json.dumps({**legacy, "samples": forge_trail(42), "presentation_version": "plain_ring_5s_v2"}))
     rows, rejected = load_traces(tmp_path)
     assert not rejected and [row["file"] for row in rows] == ["current.json"]
     assert len(load_traces(tmp_path, None, None)[0]) == 2  # Explicit transplant input.
     report = calibration_report(tmp_path, variant())
-    assert report["recordings"] == 1 and report["presentation_version"] == "plain_ring_v1"
-    assert report["candidate"]["presentation_version"] == "plain_ring_v1"
+    assert report["recordings"] == 1 and report["presentation_version"] == "plain_ring_5s_v2"
+    assert report["candidate"]["presentation_version"] == "plain_ring_5s_v2"
 
 
 def test_disposable_lab_filters_both_human_and_attack_display_cohorts():
     values = {name: sum(band) / 2 for name, band in variant()["features"].items()}
     legacy = {"attempt_id": "legacy", "device": "mouse", "features": values}
-    current = {**legacy, "attempt_id": "current", "presentation_version": "plain_ring_v1"}
+    current = {**legacy, "attempt_id": "current", "presentation_version": "plain_ring_5s_v2"}
     app = create_lab_app(humans=[legacy, current], forgeries=[{**legacy, "round_id": "r"}])
     with TestClient(app) as client:
         health = client.get("/healthz").json()
@@ -51,9 +51,9 @@ def test_disposable_lab_scores_open_challenge_with_issued_rule():
     baseline = variant()
     values = {name: sum(band) / 2 for name, band in baseline["features"].items()}
     app = create_lab_app(variant=baseline, humans=[{"attempt_id": "synthetic-human-fixture", "device": "mouse",
-                        "features": {**values, "lag_ms": 250}, "presentation_version": "plain_ring_v1"}],
+                        "features": {**values, "lag_ms": 250}, "presentation_version": "plain_ring_5s_v2"}],
                         forgeries=[{"attempt_id": "synthetic-attack-fixture", "round_id": "r",
-                                    "features": {**values, "lag_ms": 150}, "presentation_version": "plain_ring_v1"}])
+                                    "features": {**values, "lag_ms": 150}, "presentation_version": "plain_ring_5s_v2"}])
     auth = {"X-Lab-Key": "dev"}
     with TestClient(app) as client:
         issued = client.post("/v1/challenges", headers=auth, json={"session_id": "test"}).json()
@@ -72,4 +72,4 @@ def test_disposable_lab_scores_open_challenge_with_issued_rule():
                                      "pointer_type": "mouse", "cohort": "red", "round_id": "test"})
         assert response.status_code == 200
         assert response.json()["result"]["variant"] == baseline["id"]
-        assert issued["presentation_version"] == app.state.attempts[0]["presentation_version"] == "plain_ring_v1"
+        assert issued["presentation_version"] == app.state.attempts[0]["presentation_version"] == "plain_ring_5s_v2"

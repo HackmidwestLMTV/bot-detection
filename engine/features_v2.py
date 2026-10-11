@@ -2,10 +2,10 @@
 import numpy as np
 
 from contracts.research import FEATURE_VERSION
-from engine.path import make_path
+from engine.path import DEFAULT_PATH_VERSION, DURATION_MS, make_path
 from engine.scorer import features as legacy_features, normalize_samples, smooth
 
-TIMES = np.linspace(0, 3000, 181)
+TIMES = np.linspace(0, DURATION_MS, round(DURATION_MS * 60 / 1000) + 1)
 CHANNELS = ("cursor_vx", "cursor_vy", "error_x", "error_y", "target_vx", "target_vy", "speed", "valid")
 FEATURE_NAMES = (
     "lag_ms", "err_mean_px", "submoves_per_s", "jitter_px", "power_law_beta",
@@ -24,9 +24,9 @@ def _q(x, percentile):
     return float(np.percentile(x, percentile)) if len(x) else 0.0
 
 
-def representation(samples, seed, path_version="smooth_v2"):
+def representation(samples, seed, path_version=DEFAULT_PATH_VERSION):
     native = normalize_samples(samples)
-    if len(native) > 5000 or native[-1, 0] > 3000 or (native[:, 1:] < 0).any() or (native[:, 1:] > [600, 400]).any():
+    if len(native) > 5000 or native[-1, 0] > DURATION_MS or (native[:, 1:] < 0).any() or (native[:, 1:] > [600, 400]).any():
         raise ValueError("research samples must lie inside the bounded challenge")
     t, points = native[:, 0], native[:, 1:] / [600, 400]
     delta = np.diff(t)
@@ -66,7 +66,7 @@ def representation(samples, seed, path_version="smooth_v2"):
     denominator = np.linalg.norm(velocity, axis=1) * np.linalg.norm(delayed_velocity, axis=1)
     moving = supported & observed & (denominator > 1e-7)
     alignment = np.sum(velocity * delayed_velocity, axis=1) / np.maximum(denominator, 1e-7)
-    windows = [_mean(alignment[moving & (TIMES >= lo) & (TIMES < lo + 750)]) for lo in (0, 750, 1500, 2250)]
+    windows = [_mean(alignment[moving & (TIMES >= lo) & (TIMES < lo + 750)]) for lo in range(0, DURATION_MS, 750)]
     turns = np.diff(np.unwrap(np.arctan2(velocity[:, 1], velocity[:, 0])))
     turn_mask = supported[1:] & supported[:-1] & (speed[1:] > 1e-4) & (speed[:-1] > 1e-4)
     residual = error[valid]
@@ -88,7 +88,7 @@ def representation(samples, seed, path_version="smooth_v2"):
     vector = np.asarray(values, dtype=np.float32)
     if not np.isfinite(vector).all() or not np.isfinite(sequence).all():
         raise ValueError("nonfinite research representation")
-    quality = {"eligible": bool(len(t) >= 40 and t[-1] - t[0] >= 2500 and valid.mean() >= 0.85),
+    quality = {"eligible": bool(len(t) >= 40 and t[-1] - t[0] >= DURATION_MS - 500 and valid.mean() >= 0.85),
                "coverage": float(valid.mean()), "event_count": len(t), "max_gap_ms": float(delta.max())}
     return {"features": dict(zip(FEATURE_NAMES, vector.tolist())), "vector": vector,
             "sequence": sequence.astype(np.float32), "quality": quality, "feature_version": FEATURE_VERSION}

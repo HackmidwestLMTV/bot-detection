@@ -86,7 +86,7 @@ def test_calibration_keeps_versions_separate(tmp_path):
     for version in ("v1", "smooth_v2"):
         trace = {"seed": 42, "samples": forge_trail(42, lag_ms=100, noise_px=2, path_version=version),
                  "cohort": "human_test", "tester": {"consent": True}, "device": "mouse", "round_id": None,
-                 "presentation_version": "plain_ring_v1"}
+                 "presentation_version": "plain_ring_5s_v2"}
         if version != "v1":
             trace["path_version"] = version
         (tmp_path / f"{version}.json").write_text(json.dumps(trace))

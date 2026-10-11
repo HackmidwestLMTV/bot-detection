@@ -1,8 +1,8 @@
 // "Follow the comet" game: pure canvas + pointer logic. No network, no page state.
 // runComet(canvas, seed, {onProgress, onStart, signal}) -> Promise<{samples, pointerType}>
 import { makePath, W, H, DURATION_MS } from './path.js';
-import { drawTarget, targetGeometry } from './comet-target.js?v=plain_ring_v1';
-export { PRESENTATION_VERSION } from './comet-target.js?v=plain_ring_v1';
+import { drawTarget, targetGeometry } from './comet-target.js?v=plain_ring_5s_v2';
+export { PRESENTATION_VERSION } from './comet-target.js?v=plain_ring_5s_v2';
 
 export const START_RADIUS = 40;   // logical px: pointer must land this close to start
 export const GLOW_RADIUS = 80;    // logical px: decorative symmetric glow
@@ -29,7 +29,7 @@ export function eventTime(ts, now) {
   return Number.isFinite(ts) && Math.abs(ts - now) < 60000 ? ts : now;
 }
 
-// PointerEvent-likes -> [[t_ms, x, y], ...] with t counted from t0, kept only for 0 <= t <= 3000.
+// PointerEvent-likes -> [[t_ms, x, y], ...] with t counted from t0, kept only for 0 <= t <= DURATION_MS.
 export function buildSamples(events, t0, rect, now) {
   const out = [];
   for (const ev of events) {

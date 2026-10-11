@@ -13,13 +13,13 @@
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 
 const BASE = (process.argv[2] || 'http://localhost:8801').replace(/\/$/, '');
 const CHROME = process.env.CHROME_PATH
   || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = 9222 + Math.floor(Math.random() * 900);
-const DURATION_MS = 3000;
+const DURATION_MS = 5000;
 const W = 600, H = 400;
 
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -129,11 +129,17 @@ export class Browser {
     return page;
   }
   async close() {
+    // Let Chrome stop its child processes before deleting its isolated profile.
+    // Killing only the parent leaves Windows file handles open briefly.
+    try { await this.conn.send('Browser.close'); } catch { /* already closed */ }
     this.conn.close();
-    this.proc.kill('SIGTERM');
-    await Promise.race([new Promise(r => this.proc.once('exit', r)), sleep(3000)]);
-    this.proc.kill('SIGKILL');
-    rmSync(this.dir, { recursive: true, force: true });
+    if (this.proc.exitCode === null) {
+      await Promise.race([new Promise(r => this.proc.once('exit', r)), sleep(3000)]);
+      if (this.proc.exitCode === null) this.proc.kill('SIGKILL');
+    }
+    const profile = resolve(this.dir);
+    assert(profile.startsWith(resolve(tmpdir()) + sep + 'followit-e2e-'), 'refusing cleanup outside test profiles');
+    rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
 }
 
@@ -259,7 +265,7 @@ function posAt(tbl, t) {
   return tbl[i];
 }
 
-// The server pins the path version per challenge (config.PATH_VERSION, currently smooth_v2)
+// The server pins the path version per challenge (config.PATH_VERSION, currently roaming_v3)
 // and scores against it, so the test must follow THAT curve. Reading it from the challenge
 // response rather than hardcoding keeps this suite correct across future path versions --
 // following the wrong curve inflates err_mean_px and fails the attempt for the wrong reason.
@@ -619,7 +625,7 @@ try {
       const g = await openGame(page);
       await follow(page, g, { ms: 500 });
       // Move the pointer off the canvas so nothing more is recorded, and let the
-      // comet run out its 3 seconds.
+      // comet run out its 5 seconds.
       await page.c.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 4, y: 4, button: 'none', buttons: 0, pointerType: 'mouse' });
       const a = await attemptResult(page);
       assert(a.status === 422, `short trail returned ${a.status}, expected 422`);

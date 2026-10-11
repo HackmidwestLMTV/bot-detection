@@ -74,7 +74,7 @@ summary{cursor:pointer;font-weight:650}
   <small>Scored attempts, not saved recordings. Use it to confirm phones are reaching this app at all; a number here with no recordings above means consent or enrollment did not complete.</small>
   <h3>Local recorder traces — this is Phase C’s checkpoint</h3>
   <p><small>Recordings saved by <code>scripts/collect.sh</code>’s phone/LAN recorder are files on the collecting machine, not rows in this app, and <span style="font-family:var(--mono)">engine.calibrate</span> reads only these. The progress tally above does not count toward Phase C. Count them in a terminal there:</small></p>
-  <div class="cmd"><code id="count-cmd">python3 -c "import collections,glob,json;t=[json.load(open(f)) for f in glob.glob('contracts/fixtures/human_traces/*.json')];c=collections.Counter(x['device'] for x in t if x.get('path_version')=='smooth_v2');print(sum(c.values()),dict(c))"</code><button class="secondary" id="copy-count">Copy</button></div>
+  <div class="cmd"><code id="count-cmd">python3 -c "import collections,glob,json;t=[json.load(open(f)) for f in glob.glob('contracts/fixtures/human_traces/*.json')];c=collections.Counter(x['device'] for x in t if x.get('path_version')=='roaming_v3' and x.get('presentation_version')=='plain_ring_5s_v2');print(sum(c.values()),dict(c))"</code><button class="secondary" id="copy-count">Copy</button></div>
 </section>
 
 <section class="card"><h2>Operator access</h2>
@@ -101,7 +101,7 @@ summary{cursor:pointer;font-weight:650}
   <button class="secondary" id="copy">Copy invitation link</button>
   <div class="say">
     <p><q id="say-open">Can I borrow two minutes? We need real human movement to calibrate this, and right now we only have synthetic data.</q></p>
-    <p><q id="say-device">Scan this, follow the ball with your finger for three seconds.</q></p>
+    <p><q id="say-device">Scan this, follow the ball with your finger for five seconds.</q></p>
     <p><q>The page asks you to tick two boxes, top to bottom: one to allow the recording for training movement models, one to share it for calibration. Both are yours to refuse — the recording is only kept if you tick them, and it is deleted after 72 hours.</q></p>
     <p><q>Scroll down past the ticket artwork to the Tester mode panel — that is where the boxes are. Three or four goes is plenty, and a miss is useful too.</q></p>
     <p><q>Before you hand it back: the line under your score should say the recording was saved. If it doesn’t, tell me.</q></p>

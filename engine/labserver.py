@@ -18,7 +18,8 @@ from pydantic import BaseModel, Field, StrictBool
 
 from engine.scorer import normalize_samples, score, score_features, validate_variant
 from engine.gate import gate
-from contracts.presentation import LEGACY_PRESENTATION, PRESENTATION_VERSION
+from contracts.presentation import DURATION_MS, LEGACY_PRESENTATION, PRESENTATION_VERSION
+from engine.path import DEFAULT_PATH_VERSION
 
 
 class ChallengeRequest(BaseModel):
@@ -142,7 +143,7 @@ def create_lab_app(*, lab_key="dev", variant=None, humans=(), forgeries=(), cloc
         challenges[challenge_id] = {"seed": seed, "expires": clock() + 120, "path_version": path_version,
                                     "presentation_version": presentation_version, "scoring_config": deepcopy(variant)}
         return {"challenge_id": challenge_id, "seed": seed, "variant_id": variant["id"],
-                "duration_ms": 3000, "expires_in_s": 120, "path_version": path_version,
+                "duration_ms": DURATION_MS, "expires_in_s": 120, "path_version": path_version,
                 "presentation_version": presentation_version}
 
     @app.post("/v1/challenges/{challenge_id}/attempt", dependencies=[Depends(auth)])
@@ -154,7 +155,7 @@ def create_lab_app(*, lab_key="dev", variant=None, humans=(), forgeries=(), cloc
             raise HTTPException(429, "restart the disposable lab to clear capacity")
         try:
             samples = normalize_samples(body.samples)
-            if samples[-1, 0] > 3000:
+            if samples[-1, 0] > DURATION_MS:
                 raise ValueError("samples exceed challenge duration")
             result = score(samples, item["seed"], {**item["scoring_config"], "path_version": item["path_version"]})
         except ValueError as exc:
@@ -334,6 +335,6 @@ def local_forgeries():
 
 
 _local_variant = json.loads((Path(__file__).resolve().parents[1] / "contracts/fixtures/variant_v1.json").read_text())
-_local_variant["path_version"] = os.environ.get("PATH_VERSION", "smooth_v2")
+_local_variant["path_version"] = os.environ.get("PATH_VERSION", DEFAULT_PATH_VERSION)
 app = create_lab_app(lab_key=os.environ.get("LAB_KEY", "dev"), variant=_local_variant,
                      humans=local_humans(), forgeries=local_forgeries())
