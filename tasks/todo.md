@@ -27,3 +27,17 @@
 - Startup and feature definitions are documented in `engine/README.md`. Human calibration, actual phone testing, AI agents, and production deployment remain later work.
 - Original `.gitignore` edit and local planning documents were preserved. Local-only path.js is excluded through `.git/info/exclude`.
 - Phase 1 commit explicitly approved by the user. Stage only the verified Phase 1 kit; preserve unrelated local edits and subsequent recordings.
+
+# Phase 2: Strands integration
+
+- [x] Implement bounded provider configuration, SDK hooks, and synthetic smoke checks.
+- [x] Verify offline SDK behavior and run the live Akamai checks.
+- [x] Complete regression checks and documentation (see `tasks/phase2.md`).
+- [x] User explicitly approved committing Phase 2.
+
+## Phase 2 review
+
+- Phase 1 committed as `ed1ff1e`. Phase 2 verified and approved for a separate commit.
+- 58 tests passed and dependencies are consistent. Live Akamai checks passed in
+  12 model calls; no application variants were activated.
+- Worker implementation, human calibration, and deployment remain later phases.

@@ -1,0 +1,4 @@
+-r requirements.txt
+strands-agents[openai]==1.59.0
+openai>=2,<3
+python-dotenv>=1,<2
