@@ -1,5 +1,6 @@
 @import url('/static/design-system.css');
-main { max-width: 1260px; padding: 46px 36px 64px; margin: auto; }
+/* Same shell and gutter as the header and footer, so every edge lines up. */
+main { max-width: var(--shell); padding-block: 46px 64px; padding-inline: var(--gutter-l) var(--gutter-r); margin-inline: auto; width: 100%; }
 .breadcrumb { margin-bottom: 30px; font-size: 12px; color: var(--muted); display: flex; gap: 14px; align-items: center; }
 .breadcrumb b { color: var(--fg); }
 .checkout-layout { display: grid; grid-template-columns: 1fr 1.02fr; gap: 64px; align-items: start; }
@@ -8,8 +9,11 @@ main { max-width: 1260px; padding: 46px 36px 64px; margin: auto; }
 .meta { color: var(--muted); font-size: 14px; }
 .poster { height: 290px; margin: 28px 0 24px; border-radius: var(--radius); background: #101d2c; position: relative; overflow: hidden; color: #fff; }
 .poster svg { position: absolute; width: 100%; height: 100%; }
-.poster-caption { position: absolute; left: 26px; bottom: 23px; right: 26px; display: flex; justify-content: space-between; align-items: end; font: 11px/1.5 var(--mono); letter-spacing: .08em; }
-.poster-caption strong { font: 800 30px/.95 var(--font); letter-spacing: -.05em; max-width: 180px; }
+.poster-caption { position: absolute; left: 26px; bottom: 23px; right: 26px; display: flex; gap: 14px; justify-content: space-between; align-items: end; font: 11px/1.5 var(--mono); letter-spacing: .08em; }
+/* 180px of display type and the KC/MO stamp collided inside a 268 px poster on a 320 px
+   phone. Both halves scale with the poster instead of overlapping. */
+.poster-caption strong { font: 800 clamp(21px, 6.4vw, 30px)/.95 var(--font); letter-spacing: -.05em; max-width: min(180px, 52%); }
+.poster-caption span { flex: none; font-size: clamp(9px, 2.6vw, 11px); text-align: right; }
 .ticket { display: flex; align-items: center; justify-content: space-between; padding-bottom: 22px; border-bottom: 1px dashed #bbc4cf; }
 .ticket-kind { font-size: 16px; font-weight: 700; }
 .ticket-note { font-size: 13px; color: var(--muted); margin-top: 2px; }
@@ -23,7 +27,10 @@ main { max-width: 1260px; padding: 46px 36px 64px; margin: auto; }
   letter-spacing: .08em; padding: 5px 9px; border-radius: 0; }
 h2 { font-size: 27px; line-height: 1.15; letter-spacing: -.04em; font-weight: 700; font-variation-settings: 'wdth' 94; }
 .lede { margin-top: 10px; font-size: 13px; color: var(--muted); max-width: 380px; }
-.stage { position: relative; margin-top: 22px; }
+/* The canvas fills the stage, so the stage is the only safe place to bound its size:
+   capping the canvas height directly would break the 3:2 box the 600x400 logical mapping
+   depends on. Bounding the WIDTH keeps the ratio exact and the pointer maths honest. */
+.stage { position: relative; margin-top: 22px; margin-inline: auto; }
 canvas { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; border: 0; padding: 0; border-radius: 12px; background: #10142a; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .ring { position: absolute; right: 12px; top: 12px; width: 34px; height: 34px; transform: rotate(-90deg); pointer-events: none; }
 .ring circle { fill: none; stroke-width: 4; }.ring-track { stroke: #ffffff30; }.ring-fill { stroke: #fb9b4b; stroke-linecap: round; }
@@ -43,7 +50,7 @@ canvas { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; border:
 .status:empty { margin-top: 0; }
 .reserve { margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--line); display: grid; gap: 12px; }
 .privacy-note { text-align: center; font-size: 11px; color: var(--muted); margin-top: 14px; }
-.linkish { background: transparent; border: 0; color: var(--muted); text-decoration: underline; font-size: 12px; padding: 8px 0; }
+.linkish { background: transparent; border: 0; color: var(--muted); text-decoration: underline; font-size: 12px; padding: 8px 0; min-height: 44px; }
 .result,.reserve-msg,.confirm { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #f5f7fa; margin-top: 10px; font-size: 13px; }
 .feature-results { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 12px; }
 .feature-results caption { text-align: left; font-weight: 700; margin-bottom: 8px; }
@@ -54,6 +61,36 @@ canvas { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; border:
 .check-row { display: flex; align-items: start; gap: 10px; margin-top: 12px; }.check-row input{width:20px;height:20px;flex:none;accent-color:var(--accent)}
 .tester > label:first-of-type { display: block; margin-top: 12px; }
 #research-code { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 7px; background: white; font: inherit; }
-fieldset{border:0;padding:0;margin:16px 0 0;min-width:0}legend{padding:0;margin-bottom:8px}.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.seg label{position:relative}.seg input{position:absolute;opacity:0;inset:0;margin:0}.seg span{display:block;text-align:center;padding:10px 4px;background:white;border:1px solid var(--line);border-radius:7px}.seg input:checked+span{border-color:var(--accent);color:var(--accent);font-weight:700}.seg input:focus-visible+span{outline:3px solid var(--focus);outline-offset:2px}
-@media(max-width:950px){.checkout-layout{gap:28px}main{padding:30px 24px 50px}.checkout-card{padding:22px}.poster{height:260px}}
-@media(max-width:700px){main{padding:24px 20px 40px}.checkout-layout{grid-template-columns:1fr;gap:28px}.hero h1{font-size:54px}.poster{height:200px;margin:20px 0}.breadcrumb{margin-bottom:22px}.checkout-card{padding:22px 18px}.hero h1{max-width:none}.site-footer{padding:24px 20px}}
+fieldset{border:0;padding:0;margin:16px 0 0;min-width:0}legend{padding:0;margin-bottom:8px}.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.seg label{position:relative}.seg input{position:absolute;opacity:0;inset:0;margin:0}.seg span{display:flex;align-items:center;justify-content:center;min-height:44px;text-align:center;padding:10px 4px;background:white;border:1px solid var(--line);border-radius:7px}.seg input:checked+span{border-color:var(--accent);color:var(--accent);font-weight:700}.seg input:focus-visible+span{outline:3px solid var(--focus);outline-offset:2px}
+@media(max-width:950px){.checkout-layout{gap:28px}main{padding-block:30px 50px}.checkout-card{padding:22px}.poster{height:260px}}
+@media(max-width:700px){main{padding-block:24px 40px}.checkout-layout{grid-template-columns:1fr;gap:28px}.hero h1{font-size:clamp(44px,13vw,54px)}.poster{height:200px;margin:20px 0}.breadcrumb{margin-bottom:22px}.checkout-card{padding:22px 18px}.hero h1{max-width:none}}
+/* iPhone SE and friends: the two 'wdth 88' display lines are the only things that can
+   outgrow a 280 px column, so the headline scales with the screen below 390 px. */
+@media(max-width:360px){.checkout-card{padding:20px 15px}.poster{height:175px}.price{font-size:26px}.ticket-kind{font-size:15px}}
+/* Phone landscape. The 3:2 canvas, the header and the buttons all want the same 390 px of
+   height, so the page trims its own chrome and bounds the stage WIDTH (never its height)
+   so the canvas plus 'Skip the game' land on one screen. dvh is deliberate: an old Safari
+   that does not understand it simply drops the cap and keeps today's behaviour. */
+@media(max-height:540px) and (orientation:landscape){
+  main{padding-block:18px 26px}
+  .breadcrumb{margin-bottom:14px}
+  .hero h1{font-size:clamp(38px,5vw,54px);margin:8px 0 12px}
+  .poster{height:clamp(130px,26vh,190px);margin:16px 0 14px}
+  .checkout-card{padding:18px 20px}
+  .card-kicker{margin-bottom:12px}
+  h2{font-size:22px}
+  .lede{margin-top:6px;font-size:12.5px}
+  .stage{margin-top:14px;max-width:min(100%,calc((100dvh - 186px) * 1.5))}
+  .actions{margin-top:10px}
+  .reserve{margin-top:16px;padding-top:16px}
+}
+/* Big desks hold the composition instead of thinning into a ribbon: the shell widens
+   (--shell, design-system.css) and the display type and poster grow with it. */
+@media(min-width:1700px){
+  main{padding-block:60px 80px}
+  .hero h1{font-size:clamp(82px,5.4vw,96px);max-width:540px}
+  .poster{height:340px}
+  .meta{font-size:15px}
+  .checkout-card{padding:34px}
+  .lede{font-size:14px;max-width:440px}
+}
