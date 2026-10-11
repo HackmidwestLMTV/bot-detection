@@ -250,8 +250,8 @@ export class Page {
 
 // Dense table of comet positions from the page's own makePath, so the test follows
 // exactly the path the page drew.
-export async function pathTable(page, seed) {
-  return page.eval(`(()=>{const p=window.makePath(${seed}>>>0);const a=[];
+export async function pathTable(page, seed, pathVersion = 'v1') {
+  return page.eval(`(()=>{const p=window.makePath(${seed}>>>0,${JSON.stringify(pathVersion)});const a=[];
     for(let t=0;t<=${DURATION_MS + 400};t+=4)a.push(p(t));return a})()`);
 }
 function posAt(tbl, t) {
@@ -259,12 +259,16 @@ function posAt(tbl, t) {
   return tbl[i];
 }
 
-async function seedOf(page) {
+// The server pins the path version per challenge (config.PATH_VERSION, currently smooth_v2)
+// and scores against it, so the test must follow THAT curve. Reading it from the challenge
+// response rather than hardcoding keeps this suite correct across future path versions --
+// following the wrong curve inflates err_mean_px and fails the attempt for the wrong reason.
+async function challengeOf(page) {
   const r = page.lastReq('/v1/challenges');
   assert(r, 'no POST /v1/challenges was made');
   const body = JSON.parse(await page.responseBody(r.id));
   assert(Number.isFinite(body.seed), `challenge response had no seed: ${JSON.stringify(body)}`);
-  return body.seed;
+  return { seed: body.seed, pathVersion: body.path_version || 'v1' };
 }
 
 // Open the page and wait until runComet is listening for input.
@@ -273,12 +277,12 @@ export async function openGame(page, { touch = false, viewport = null } = {}) {
   await page.goto('/');
   await page.waitFor(`document.getElementById('overlay').textContent.includes('finger on the comet')`,
     15000, 'the comet to be ready for input');
-  const seed = await seedOf(page);
-  const tbl = await pathTable(page, seed);
+  const { seed, pathVersion } = await challengeOf(page);
+  const tbl = await pathTable(page, seed, pathVersion);
   const rect = await page.rect('#comet');
   // logical canvas px -> viewport CSS px
   const toCss = ([lx, ly]) => [rect.x + lx * rect.w / W, rect.y + ly * rect.h / H];
-  return { seed, tbl, rect, toCss, touch };
+  return { seed, pathVersion, tbl, rect, toCss, touch };
 }
 
 // A hand, not a robot. The real scorer rejects a pixel-perfect follow (zero lag, zero
