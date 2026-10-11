@@ -243,3 +243,56 @@ real engine: 101 passed,  2 skipped     # only 2 skips, so gate/approval/activat
 AsyncOpenAI` at `engine/tests/test_blue_worker.py:8` is unguarded on `origin/p2` as of
 `2446359`, so a full-suite run still collects zero tests. Everything else in this review is
 either resolved or waiting on a decision from you (#3, #4).
+
+---
+
+# Now review mine — specific places I'd look
+
+This has to go both ways, so here's where I think my half is weakest. Don't just read the
+diff; point your own suite and your worker at it, the way I pointed mine at yours. That's
+what found everything real in this review.
+
+My commits to review: `cab7242` and `20c30cb` on `p1-platform`.
+
+**1. `limits.py` is in-memory and trusts the first `X-Forwarded-For` hop.**
+Only safe because Caddy overwrites that header. If anything else ever fronts the app, or if
+someone reaches port 8000 directly, a client can spoof their IP and bypass the 300/min
+ceiling. Your `deploy.sh` keeps 8000 reachable on localhost; the firewall rule for 8000 is
+still open from the HTTPS-fallback plan. **I think that rule should be deleted now that
+HTTPS works** — tell me if you're still relying on it. Also: single-worker only. If anyone
+adds `--workers 2`, every limit silently halves and the SSE broadcaster breaks.
+
+**2. Reservation cap semantics — I made a judgement call you may disagree with.**
+On the third reservation for a session, the token is **consumed and then rejected** with
+`{"reason": "cap"}`. So a user who hits the cap loses that pass and must re-verify. The
+alternative (check cap first, leave the token spendable) is friendlier but opens a probe:
+you could test the cap repeatedly without spending anything. I chose the strict one. On
+stage it only matters if someone reserves three times, which the demo doesn't do — but it's
+a real product decision, not an implementation detail.
+
+**3. Unknown tokens report `"used"`, deliberately.**
+Rather than revealing whether a token id exists. Order of reason resolution is
+`wrong_session` → `used` → `expired`. If you think the demo reads better with an explicit
+"unknown", say so.
+
+**4. The concurrency test has never run against the live site.**
+`1 success, 19 rejected` locally, five times, including against a real uvicorn over real
+sockets. But `FOLLOWIT_LIVE_URL` has never been set because there's no deploy yet. Managed
+Postgres over TLS with pooling is where the atomic redeem could behave differently. Worth
+running as soon as the VM is up — it's one command and it's on the 6 AM checklist.
+
+**5. Nothing in `web/static/` has been touched by a real finger.**
+The comet, the 40px start zone, pointer capture, the 600×400 conversion on a CSS-scaled
+canvas — all verified only by Node unit tests and headless screenshots at a forced 390px
+width. You changed `ticket.js` and `index.html` in `02d9a7e`; if you've since run it on an
+actual phone, your observation beats all of my test output and I'd want to know.
+Related: PoW needs `crypto.subtle`, so a phone on plain `http://IP:8000` silently can't
+finish the fallback. HTTPS only.
+
+**6. `/v1/lab/reset` keeps human traces by design.**
+That's what made the NULL-device bug unrecoverable. It's deliberate — those traces are the
+gate's evidence and they're expensive to collect — but it means there is no in-app way to
+delete a bad human row. If you want a narrow escape hatch for demo night, say so and I'll
+add one; I left it out on purpose rather than by omission.
+
+Fire back in `tasks/` or on PR #1.
