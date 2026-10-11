@@ -1,6 +1,7 @@
 # Follow It
 
-**Follow a ball for five seconds. See the evidence behind every proposed defense update.**
+**Behavioral bot detection with agents that test attacks, propose improvements,
+and show the human impact before anything goes live.**
 
 [Try the live demo](https://172-238-40-140.sslip.io/) ·
 [Explore the agent lab](https://172-238-40-140.sslip.io/lab) ·
@@ -10,20 +11,47 @@
 
 Imagine reaching the checkout for a concert you have been waiting to attend.
 Your ticket is one click away, but first you must solve another image puzzle.
-The person buying the ticket feels the friction; the operator still has to ask
-whether the check is stopping automation and whom it might be excluding.
+You spend time proving you are human while automated solvers keep improving.
+The operator needs to know which bots still get through and whether a tougher
+check will also turn away real customers.
+
+Research has demonstrated automated attacks against many CAPTCHA systems under
+tested conditions. A 2023 [study of CAPTCHA providers and solving services](https://arxiv.org/abs/2306.07543)
+found vulnerabilities to automated solvers; a separate [USENIX study](https://www.usenix.org/conference/usenixsecurity23/presentation/searles)
+examined the human cost through 14,000 challenges completed by 1,400 participants.
+These findings motivate our experiment; they do not establish that every CAPTCHA
+is easily bypassed or that our detector is already better.
 
 We built Follow It around two goals:
 
-- **Make the interaction simple.** Try a short movement task in a complete
-  ticket checkout, with a browser-check fallback for people who skip the motion.
-- **Make security updates explainable.** Let AI agents test attacks and propose
-  defenses, but measure the effect on recorded human attempts before an operator
-  decides what goes live.
+- **Learn from behavior.** Collect consented mouse, trackpad, and phone movement,
+  then compare those recordings with synthetic bot attempts on the same task.
+- **Make improvement measurable.** Let Red search for accepted attacks and Blue
+  propose defenses, then check whether fewer attacks pass without rejecting more
+  recorded human attempts before an operator decides what goes live.
 
-The result is a working research demo: movement verification, visible attack
-testing, and reviewed updates in one flow. Removing image puzzles alone is not
-our claim to novelty, and this is not yet a validated production CAPTCHA replacement.
+Follow It is a **bot-detection research platform with an agent improvement loop**.
+The five-second ball task is a quick way to collect and compare behavior; ticket
+checkout shows where verification fits into a real product. The contribution is
+the visible cycle of collection, simulated attacks, measured human impact, and
+reviewed updates. It is not yet a validated production CAPTCHA replacement.
+
+### The short pitch
+
+> Bots can solve many of the challenges we ask humans to complete. Follow It
+> explores behavioral bot detection instead: volunteers follow a ball for five
+> seconds, and we compare their movement with simulated bot behavior. Red finds
+> weaknesses; Blue proposes improvements. Every proposed update is tested against
+> recorded human and attack evidence, and a person approves what goes live.
+
+### Why study movement?
+
+[BeCAPTCHA-Mouse](https://biometrics.eps.uam.es/fierrez/files/2022_PR_BeCAPTCHA-Mouse_Acien.pdf)
+studied mouse-dynamics features and synthetic trajectories for bot detection,
+including attacks designed to imitate humans. That supports testing movement as
+an additional signal, not treating it as an unforgeable human signature. Our
+moving-target task, touch devices, and participants still need their own evaluation.
+Browser telemetry does not directly measure muscles or subconscious physiology.
 
 ## What you can try
 
@@ -82,6 +110,13 @@ Approved changes affect newly issued challenges.
 evaluation, and optional shadow inference. They cannot issue passes or activate a
 policy. The verified live release has no trained artifact loaded; fresh consented
 data and participant-separated evaluation come first.
+
+There are two improvement tracks. Today, Red and Blue propose and evaluate changes
+to deterministic scoring rules. Separately, consented research recordings support
+training and comparing RF/CNN/LSTM candidates: RF uses summary features, while CNN
+and LSTM also examine movement sequences. These research candidates stay in shadow
+mode if enabled. "Self-improving agents" means an evidence-gated experiment loop,
+not automatic retraining or unsupervised changes to visitor decisions.
 
 ## Sponsor challenges and technologies
 
@@ -245,15 +280,39 @@ input is not a physical-phone or human-usability study.
 
 ## Demo evidence and next steps
 
+### A short judge walkthrough
+
+1. **Collect a human example.** In `/research`, issue an invitation to a consenting
+   volunteer using their actual mouse, trackpad, or phone. Have them follow the
+   ball for five seconds, then show the saved research count and device coverage.
+   A calibration attempt count alone does not confirm a saved training recording.
+2. **Show the product use case.** Complete an ordinary ticket reservation. Explain
+   that this uses the current deterministic policy and saves no raw recording.
+3. **Generate bot examples.** Run Red in `/lab`. Point to a timestamped synthetic
+   attempt and its result. A pass means the attack fooled the scorer; Red generates
+   coordinate samples with tools rather than moving a hidden browser cursor.
+4. **Compare a proposed defense.** Run Blue and show the fixed gate's baseline and
+   candidate results on stored attack and calibration evidence. Read out the
+   accepted-attack and rejected-human counts for each represented device. Missing
+   device coverage is untested; calibration and model-training datasets are separate.
+5. **Show controlled improvement.** Review an eligible proposal and its evidence
+   before approving. If it fails the gate, show why and keep the active policy.
+   An approved rule applies to newly issued challenges. Explain that CNN/LSTM
+   research remains a separate offline/shadow experiment.
+
+Close with the question the demo can answer: **Can this proposed rule stop more
+of our recorded attacks without rejecting more of our recorded human attempts?**
+Broader effectiveness requires new participants and attacks held out of training.
+
+### Verified release and limits
+
 The live rollout was verified on **October 11, 2026** with `roaming_v3` motion,
 `plain_ring_5s_v2` presentation, private VM recording storage, and 72-hour cleanup.
-Historical recordings remain separate; fresh device coverage starts as **untested**.
+Historical recordings remain separate; missing current device coverage is **untested**.
 No trained research model was enabled. Earlier bounded Akamai runs exercised Red
 and Blue; the latest rollout checked worker/API compatibility without new model calls.
 
-For a walkthrough, show checkout → reservation → Red attacks → Blue proposal →
-human-impact comparison → operator decision. If the gate rejects a proposal,
-show the rejection. The [recorded backup](recordings/README.md) uses historical
+The [recorded backup](recordings/README.md) uses historical
 synthetic human evidence: label it as replay and never present its counts as real
 user results. Run replay only in a disposable demo environment.
 
