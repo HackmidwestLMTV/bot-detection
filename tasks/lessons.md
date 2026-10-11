@@ -65,3 +65,10 @@ changes. Report that integration gap rather than claiming deployment validation.
 Do not read an integrated component from a remote Git branch in a test. Shallow
 CI checkouts may lack that ref, and a moving branch does not represent the code
 under review. Read the component from the current checkout.
+
+## Lesson: A phone viewport does not reproduce finger occlusion
+
+Luc's real phone trial exposed an obscured target despite smooth path tests and
+responsive layout checks. Size the visible ring in CSS pixels, share the renderer
+between recorder and checkout, and validate comfort with actual touch input.
+Do not mistake the legacy recorder page for the website's current design.

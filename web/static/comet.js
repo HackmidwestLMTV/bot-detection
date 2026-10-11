@@ -1,6 +1,7 @@
 // "Follow the comet" game: pure canvas + pointer logic. No network, no page state.
 // runComet(canvas, seed, {onProgress, onStart, signal}) -> Promise<{samples, pointerType}>
 import { makePath, W, H, DURATION_MS } from './path.js';
+import { drawTarget } from './comet-target.js';
 
 export const START_RADIUS = 40;   // logical px: pointer must land this close to start
 export const GLOW_RADIUS = 80;    // logical px: visible catch zone
@@ -79,7 +80,7 @@ function drawBackground(ctx, stars) {
   ctx.globalAlpha = 1;
 }
 
-function drawComet(ctx, [x, y], tail, glowAlpha = 0.45) {
+function drawComet(ctx, [x, y], tail, glowAlpha = 0.45, cssWidth = 600, previous = null) {
   for (let i = 0; i < tail.length; i++) {
     const [tx, ty] = tail[i], k = (i + 1) / tail.length;
     ctx.beginPath();
@@ -95,17 +96,14 @@ function drawComet(ctx, [x, y], tail, glowAlpha = 0.45) {
   ctx.beginPath();
   ctx.arc(x, y, GLOW_RADIUS, 0, 2 * Math.PI);
   ctx.fill();
-  ctx.beginPath();
-  ctx.arc(x, y, 13, 0, 2 * Math.PI);
-  ctx.fillStyle = '#fff4cc';
-  ctx.fill();
+  drawTarget(ctx, [x, y], previous, cssWidth);
 }
 
 // Draw the comet resting at its start point, no animation (used for reduced-motion / idle).
 export function drawStill(canvas, seed, pathVersion = 'v1') {
   const ctx = setupCanvas(canvas);
   drawBackground(ctx, starfield(seed));
-  drawComet(ctx, makePath(seed, pathVersion)(0), []);
+  drawComet(ctx, makePath(seed, pathVersion)(0), [], 0.45, canvas.getBoundingClientRect().width);
 }
 
 // ---- The game ----
@@ -173,13 +171,13 @@ export function runComet(canvas, seed, { onProgress, onStart, signal, pathVersio
         ctx.strokeStyle = `rgba(255, 214, 102, ${0.35 + 0.35 * pulse})`;
         ctx.lineWidth = 2;
         ctx.stroke();
-        drawComet(ctx, start, [], 0.35 + 0.2 * pulse);
+        drawComet(ctx, start, [], 0.35 + 0.2 * pulse, rect().width);
       } else {
         const el = Math.max(0, now - t0), t = Math.min(el, DURATION_MS);
         const p = pos(t);
         tail.push(p);
         if (tail.length > 12) tail.shift();
-        drawComet(ctx, p, tail.slice(0, -1));
+        drawComet(ctx, p, tail.slice(0, -1), 0.45, rect().width, pos(Math.max(0, t - 16)));
         progress = Math.max(progress, t / DURATION_MS);   // never goes backwards
         onProgress?.(progress);
         if (el >= DURATION_MS) {

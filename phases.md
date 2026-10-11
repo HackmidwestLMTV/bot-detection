@@ -29,7 +29,13 @@ fill time. Reuse the team's existing infrastructure after confirming its endpoin
 Passing demo-update CI: https://github.com/HackmidwestLMTV/bot-detection/actions/runs/38106215722.
 Luc initially could not reach the LAN recorder. With his explicit approval, a
 temporary Windows Firewall rule now permits only local-subnet Wi-Fi traffic to
-recorder TCP8004. The phone retry is pending; Wi-Fi device isolation remains possible.
+recorder TCP8004. The original Wi-Fi remained unreachable from the phone. Luc
+confirmed access after connecting the PC to his phone's hotspot. His first touch
+feedback: the old recorder UI differed from the website, and the small target
+disappeared under his finger. A local follow-up now shares the website design
+tokens and a 64-CSS-pixel target ring/current-direction cue. Luc approved merging
+and handing this work to P1. Phone access is confirmed; detailed comfort feedback
+on the larger target and full HTTPS checkout remain to be verified.
 
 ## Phase A — consolidate the demo (P2, with P1 review)
 
@@ -61,7 +67,7 @@ Automation-created trails belong in synthetic tests, never human calibration dat
 
 The current Wi-Fi recorder address is:
 
-**http://192.168.128.69:8004/dev/recorder**
+**http://172.20.10.4:8004/dev/recorder** (PC connected to Luc's phone hotspot)
 
 - Put computer and phone on the same Wi-Fi and keep this computer awake.
 - Select **Touchscreen**, press the comet, follow it for three seconds, inspect the
@@ -154,3 +160,17 @@ demo and phone flow are reliable.
 Next milestone: Luc completes a smooth attempt, sees understandable measurements,
 and can reserve through either successful movement or the fallback. Do that before
 expanding the comparison study or adding features.
+
+### Teammate takeover
+
+Pull the latest `main`; the phone visibility follow-up shares `comet-target.js`
+between checkout and recorder. It changes rendering, not target coordinates,
+path version, scoring bands, or gate rules. The recorder now uses the website's
+design tokens and keeps explicit save consent. Focused verification: 3 recorder
+API/consent tests and 13 frontend tests; 390px recorder layout and checkout target
+visually checked with no browser errors. Those checks do not simulate finger comfort.
+
+Start with the existing Akamai endpoint and complete phone checkout over HTTPS.
+Then collect fresh consented `smooth_v2` traces before tuning. The local hotspot
+URL above only works while Luc's PC/server and hotspot remain connected. The
+temporary firewall rule should be removed when those local trials finish.

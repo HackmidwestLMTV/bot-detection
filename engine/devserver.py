@@ -54,7 +54,15 @@ def create_app(*, traces_dir=None, path_js=None, clock=time.monotonic, path_vers
 
     @app.get("/dev/recorder")
     def recorder():
-        return FileResponse(Path(__file__).parent / "static/recorder.html")
+        return FileResponse(Path(__file__).parent / "static/recorder.html", headers={"Cache-Control": "no-store"})
+
+    @app.get("/dev/comet-target.js")
+    def target_javascript():
+        return FileResponse(ROOT / "web/static/comet-target.js", media_type="text/javascript", headers={"Cache-Control": "no-store"})
+
+    @app.get("/dev/design-system.css")
+    def design_styles():
+        return FileResponse(ROOT / "web/static/design-system.css", media_type="text/css")
 
     @app.get("/dev/path.js")
     def javascript():
