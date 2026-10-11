@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Follow It · Local lab</title>
+<style>
+body{font:16px system-ui;background:#101723;color:#e5edf8;max-width:1080px;margin:40px auto;padding:0 24px}h1{font-size:32px}p{color:#b3c1d7}button,input{font:inherit;padding:10px 14px;border:1px solid #455570;border-radius:6px;background:#1c2c42;color:inherit}button{cursor:pointer}button:disabled{opacity:.4;cursor:wait}.bar{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0}.card{padding:20px;border:1px solid #455570;border-radius:10px;margin:16px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}table{width:100%;border-collapse:collapse}td,th{padding:12px;text-align:left;border-bottom:1px solid #2d3b50}td:last-child{max-width:650px;overflow-wrap:anywhere}#status{color:#96d5bc}small{color:#b3c1d7}
+</style>
+<h1>Follow It · Local lab</h1>
+<p>Watch Red test synthetic movement and Blue propose a rule. A passing gate opens a decision for you; it never activates a rule on its own.</p>
+<small>Disposable local state · human recordings are preserved · start the worker to process queued runs</small>
+<div class="bar"><label>Lab key <input id="key" type="password" value="dev" autocomplete="off"></label><button id="connect">Connect</button></div>
+<p id="status" role="status">Connect to view the lab.</p>
+<div class="bar"><button id="red" disabled>Run Red</button><button id="blue" disabled>Run Blue</button><button id="reset" disabled>Reset local lab</button></div>
+<h2>Decisions</h2><div id="approvals">No pending decisions.</div>
+<h2>Activity</h2><table><thead><tr><th>Agent</th><th>Event</th><th>Details</th></tr></thead><tbody id="events"></tbody></table>
+<script>
+let connected=false,busy=false; const $=id=>document.getElementById(id);
+async function api(path,method='GET',body){const response=await fetch(path,{method,headers:{'X-Lab-Key':$('key').value,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});if(!response.ok)throw Error('Lab request failed ('+response.status+'). Check the key and server.');return response.status===204?null:response.json();}
+async function refresh(){if(!connected||busy)return;busy=true;try{const [events,variant]=await Promise.all([api('/dev/events'),api('/v1/variants/active')]);$('status').textContent='Connected · active rule '+variant.id;$('events').replaceChildren();for(const event of events.slice(-40).reverse()){const tr=document.createElement('tr');for(const value of [event.agent,event.type,JSON.stringify(event.data)]){const td=document.createElement('td');td.textContent=value;tr.append(td)}$('events').append(tr)}$('approvals').replaceChildren();let count=0;for(const event of events.filter(e=>e.type==='approval_needed').slice(-20)){const data=event.data;const decision=await api('/v1/lab/approvals/'+encodeURIComponent(data.approval_id));if(decision.status!=='pending')continue;count++;const card=document.createElement('section');card.className='card';const title=document.createElement('h3');title.textContent='Review '+data.variant_id;const detail=document.createElement('pre');detail.textContent=JSON.stringify(data.gate,null,2);card.append(title,detail);for(const approve of [false,true]){const button=document.createElement('button');button.textContent=approve?'Approve activation':'Deny';button.onclick=async()=>{button.disabled=true;try{await api('/v1/lab/approvals/'+encodeURIComponent(data.approval_id)+'/decide','POST',{approve});await refresh()}catch(error){$('status').textContent=error.message}finally{button.disabled=false}};card.append(button)}$('approvals').append(card)}if(!count)$('approvals').textContent='No pending decisions.';}catch(error){$('status').textContent=error.message}finally{busy=false}}
+$('connect').onclick=async()=>{try{await api('/v1/variants/active');connected=true;await refresh();for(const name of ['red','blue','reset'])$(name).disabled=false}catch(error){connected=false;for(const name of ['red','blue','reset'])$(name).disabled=true;$('status').textContent=error.message}};
+for(const kind of ['red','blue'])$(kind).onclick=async()=>{try{const run=await api('/v1/lab/runs','POST',{kind});$('status').textContent='Queued '+kind+' · '+run.run_id}catch(error){$('status').textContent=error.message}};
+$('reset').onclick=async()=>{try{await api('/v1/lab/reset','POST',{});await refresh()}catch(error){$('status').textContent=error.message}};
+setInterval(refresh,2000);
+</script></html>

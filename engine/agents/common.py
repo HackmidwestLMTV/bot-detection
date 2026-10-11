@@ -63,7 +63,7 @@ def load_settings(environ=None, *, provider=None):
                          api_key=environ["AKAMAI_API_KEY"].strip(), min_interval_s=interval)
 
 
-def make_model(settings=None, *, client=None):
+def make_model(settings=None, *, client=None, request_timeout=30.0):
     settings = settings or load_settings()
     if settings.provider == "bedrock":
         if client is not None:
@@ -73,11 +73,11 @@ def make_model(settings=None, *, client=None):
 
         return BedrockModel(model_id=settings.model_id, region_name=settings.region,
                             max_tokens=1500, streaming=False,
-                            boto_client_config=Config(connect_timeout=10, read_timeout=30,
+                            boto_client_config=Config(connect_timeout=10, read_timeout=request_timeout,
                                                       retries={"total_max_attempts": 1, "mode": "standard"}))
     from engine.agents.providers import AkamaiModel
 
     kwargs = {"client": client} if client is not None else {"client_args": {
-        "base_url": settings.base_url, "api_key": settings.api_key, "timeout": 30.0, "max_retries": 0,
+        "base_url": settings.base_url, "api_key": settings.api_key, "timeout": request_timeout, "max_retries": 0,
     }}
     return AkamaiModel(**kwargs, model_id=settings.model_id, stream=False, params={"max_tokens": 1500})

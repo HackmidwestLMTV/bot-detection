@@ -1,0 +1,11 @@
+**
+!engine/
+!engine/**
+!contracts/
+!contracts/fixtures/
+!contracts/fixtures/variant_v1.json
+engine/.state/
+engine/tests/
+engine/**/__pycache__/
+engine/**/*.pyc
+engine/PHASE*.md

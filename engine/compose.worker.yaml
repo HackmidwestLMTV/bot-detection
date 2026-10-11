@@ -1,0 +1,17 @@
+# Combine with Person 1's compose.yaml after copying engine/ from origin/p2.
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: engine/Dockerfile
+    environment:
+      API_BASE: http://app:8000
+      LAB_ALLOW_INTERNAL_HTTP: "1"
+      WORKER_STATE_PATH: /srv/engine/.state/worker.sqlite3
+    volumes:
+      - worker_state:/srv/engine/.state
+    depends_on:
+      - app
+    stop_grace_period: 20s
+volumes:
+  worker_state: {}
