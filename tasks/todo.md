@@ -122,9 +122,9 @@
 - [x] Locate teammate PR #1 and inspect current p1-platform and p2 heads.
 - [x] Reproduce the stuck proof-of-work worker and submit actionable review feedback.
 - [x] Create engine PR #2 and request teammate review.
-- [ ] Resolve platform review blockers and obtain teammate agreement before merge.
-- [ ] Build and visually verify a shared ticket/lab design system for Hack Midwest.
-- [ ] Validate integrated engine, browser flows, and database-backed API behavior.
+- [x] Resolve platform review blockers and merge after the user's direct-fix instruction.
+- [x] Build and visually verify a shared ticket/lab design system for Hack Midwest.
+- [x] Validate integrated engine, browser flows, and database-backed API behavior.
 - [ ] Validate Akamai deployment with a real endpoint; collect missing touch calibration.
 - [ ] Recheck both PR discussions, address feedback, and merge agreed changes.
 
@@ -139,5 +139,7 @@ Platform fixes requested from teammate; visual changes will use an isolated bran
 - Combined suite: 172 Python passed, 2 expected skips; 12 frontend tests passed.
 - Engine PR #2 opened, teammate review requested, no response at last check.
 - Merged main into p2 with both .gitignore entries retained.
-- User requested an Akamai VM. Cloud Manager requires sign-in; quoted shared 4GB
-  VM budget is pending approval. No cloud resources created yet.
+- User says the teammate already set up Akamai. Reuse that infrastructure once its
+  role and public endpoint are confirmed; no cloud resources have been created.
+- CI exposed an adapter test tied to an unfetched remote branch. It now tests the
+  checked-out adapter; the focused test passes. Full CI and image builds pending.

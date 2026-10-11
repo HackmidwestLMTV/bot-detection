@@ -1,7 +1,6 @@
 import copy
 import json
 import math
-import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -186,9 +185,8 @@ def test_gate_no_improvement_missing_evidence_and_immutability(variant):
 
 
 def test_platform_adapter_imports_real_engine(variant):
-    # Read the actual platform adapter without changing Person 1's files.
-    source = subprocess.run(["git", "show", "origin/p1-platform:web/engine_adapter.py"], cwd=ROOT,
-                            capture_output=True, text=True, check=True).stdout
+    # Validate this checkout, including shallow CI clones without remote branches.
+    source = (ROOT / "web/engine_adapter.py").read_text(encoding="utf-8")
     namespace = {"__file__": str(ROOT / "web/engine_adapter.py"), "__name__": "adapter_integration_test"}
     exec(compile(source, namespace["__file__"], "exec"), namespace)
     assert namespace["USING_STUBS"] is False

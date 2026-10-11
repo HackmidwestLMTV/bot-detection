@@ -59,3 +59,9 @@ report is recovered from server evidence.
 A worker can verify the gate and evidence before activation, but the server must
 bind and consume approval atomically to protect direct callers and concurrent
 changes. Report that integration gap rather than claiming deployment validation.
+
+## Lesson: Integration tests must inspect the checked-out code
+
+Do not read an integrated component from a remote Git branch in a test. Shallow
+CI checkouts may lack that ref, and a moving branch does not represent the code
+under review. Read the component from the current checkout.
