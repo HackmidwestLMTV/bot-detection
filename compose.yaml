@@ -25,6 +25,17 @@ services:
       AKAMAI_BASE_URL: ${AKAMAI_BASE_URL:-https://ws.akamai-workshops.com/v1}
       AKAMAI_API_KEY: ${AKAMAI_API_KEY:-}
       MODEL_ID: ${MODEL_ID:-hackathon-chat}
+      # The worker keeps an explicit allowlist rather than env_file, so every variable it
+      # can see is deliberate. That also means anything missing here is silently ignored:
+      # USE_BEDROCK=1 in .env never reached the container, so the Bedrock provider could
+      # not be selected on the VM at all and Akamai kept serving with no error.
+      USE_BEDROCK: ${USE_BEDROCK:-0}
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_BEARER_TOKEN_BEDROCK: ${AWS_BEARER_TOKEN_BEDROCK:-}
+      # Bedrock quotas are per-account while this paces a single process; raise it on the
+      # VM if a round starts failing on ThrottlingException (both retry layers are off).
+      MODEL_MIN_INTERVAL_S: ${MODEL_MIN_INTERVAL_S:-3}
       WORKER_STATE_PATH: /srv/engine/.state/worker.sqlite3
     volumes: ["worker_state:/srv/engine/.state"]
     depends_on:
