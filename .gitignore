@@ -5,3 +5,4 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 person-2-engine.md
+.claude/settings.local.json

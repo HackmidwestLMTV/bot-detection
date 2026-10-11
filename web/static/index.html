@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Midnight Static · Tickets</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#check-title">Skip to verification</a>
+  <nav class="site-header" aria-label="Main navigation">
+    <a class="brand" href="/" aria-label="Follow It home"><span class="brand-mark" aria-hidden="true"></span>follow it<span style="color:var(--accent)">.</span></a>
+    <div class="site-nav"><a href="/" aria-current="page">Ticket demo</a><a href="/lab">Agent lab ↗</a><span class="pill">Hack Midwest</span></div>
+  </nav>
+  <main><div class="breadcrumb"><span>01 &nbsp; Your event</span><span aria-hidden="true">/</span><b>02 &nbsp; Your ticket</b></div><div class="checkout-layout">
+    <header class="hero">
+      <p class="eyebrow">THE LIVE SESSION / 001</p>
+      <h1>Midnight<br>Static.</h1>
+      <p class="meta">Oct 11 · Kansas City, MO · Doors 8 PM</p>
+      <div class="poster" role="img" aria-label="Abstract orange orbital artwork for Midnight Static">
+        <svg viewBox="0 0 520 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+          <defs><radialGradient id="orb"><stop stop-color="#ffba63"/><stop offset=".6" stop-color="#f2782b"/><stop offset="1" stop-color="#c54212"/></radialGradient><pattern id="grid" width="26" height="26" patternUnits="userSpaceOnUse"><path d="M26 0H0V26" fill="none" stroke="#ffffff" stroke-opacity=".06"/></pattern></defs>
+          <rect width="520" height="300" fill="url(#grid)"/>
+          <g transform="translate(320 133) rotate(-29)"><ellipse rx="178" ry="71" fill="none" stroke="#7897ac" stroke-width="1"/><ellipse rx="142" ry="58" fill="none" stroke="#b1c3ce" stroke-width="1"/><circle r="63" fill="url(#orb)"/><path d="M-178 0A178 71 0 0 0 178 0" fill="none" stroke="#ffb574" stroke-width="2"/><circle cx="-142" cy="0" r="5" fill="#ffe4b7"/></g>
+          <path d="M38 42h18m-9-9v18M458 246h14m-7-7v14" stroke="#94b0c4"/>
+        </svg>
+        <div class="poster-caption"><strong>A little less<br>ordinary.</strong><span>KC / MO<br>ONE NIGHT ONLY</span></div>
+      </div>
+      <div class="ticket">
+        <div>
+          <p class="ticket-kind">General admission</p>
+          <p class="ticket-note">1 ticket · limit 2 per visit</p>
+        </div>
+        <p class="price">$48</p>
+      </div>
+      <p class="event-note"><span aria-hidden="true">↳</span>This is a demo reservation. No payment is collected.</p></header><div class="checkout-card">
+
+    <section class="check" aria-labelledby="check-title">
+      <div class="card-kicker"><p class="eyebrow">A moment for the humans</p><span class="step">3 SEC</span></div><h2 id="check-title" tabindex="-1">Good music. Real people.</h2>
+      <p class="lede" id="lede">Follow the comet for three seconds to unlock your ticket. You can also skip the game for a browser check.</p>
+
+      <form id="tester" class="tester" hidden>
+        <p class="tester-title">Tester mode <span id="thanks" class="thanks" hidden></span></p>
+        <label class="check-row">
+          <input type="checkbox" id="consent">
+          <span>We keep this movement trace for 72 hours to test our check. Nothing else about you.</span>
+        </label>
+        <fieldset>
+          <legend>What are you using?</legend>
+          <div class="seg">
+            <label><input type="radio" name="device" value="mouse"><span>Mouse</span></label>
+            <label><input type="radio" name="device" value="trackpad"><span>Trackpad</span></label>
+            <label><input type="radio" name="device" value="touch"><span>Phone</span></label>
+          </div>
+        </fieldset>
+        <label class="check-row">
+          <input type="checkbox" id="nondominant">
+          <span>I'm using my non-dominant hand.</span>
+        </label>
+      </form>
+
+      <div class="stage" id="stage">
+        <canvas id="comet" width="600" height="400" aria-label="Comet game: put your finger or pointer on the comet and follow it for 3 seconds. You can skip this with the button below."></canvas>
+        <svg class="ring" id="ring" viewBox="0 0 48 48" aria-hidden="true">
+          <circle class="ring-track" cx="24" cy="24" r="20"></circle>
+          <circle class="ring-fill" id="ring-fill" cx="24" cy="24" r="20"></circle>
+        </svg>
+        <p class="overlay" id="overlay" aria-hidden="true"></p>
+        <span class="badge" id="stub" hidden>stub scorer</span>
+      </div>
+
+      <div class="actions">
+        <button type="button" id="skip" class="btn btn-secondary btn-big">Skip the game</button>
+        <button type="button" id="retry" class="btn btn-secondary" hidden>Try again</button>
+      </div>
+
+      <div id="result" class="result" hidden></div>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="reserve" aria-label="Reserve">
+      <button type="button" id="reserve" class="btn btn-primary btn-big" disabled>Reserve ticket</button>
+      <div id="reserve-msg" class="reserve-msg" role="alert" hidden></div>
+      <button type="button" id="verify-again" class="btn btn-secondary" hidden>Verify again</button>
+      <div id="confirm" class="confirm" hidden>
+        <p class="confirm-title">You're going to Midnight Static.</p>
+        <p>Reservation <code id="rid"></code></p>
+        <p class="confirm-note">Hold onto that number. See you Oct 11.</p>
+      </div>
+      <button type="button" id="reuse" class="linkish" hidden>Try reserving again with the same pass</button>
+    </section>
+      <p class="privacy-note">No puzzles to decipher. A browser check is always available.</p>
+    </div></div>
+  </main>
+  <footer class="site-footer"><span><strong>Follow It</strong> · Built for Hack Midwest</span><span>Powered by Akamai Cloud · Human approval at the center.</span></footer>
+  <script type="module" src="/static/ticket.js"></script>
+</body>
+</html>
