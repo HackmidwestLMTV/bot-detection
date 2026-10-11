@@ -289,6 +289,9 @@ async function submitAttempt(ch, { samples, pointerType, collectorVersion }, gen
 }
 
 function failToPow() {
+  // #result is not a live region, so a screen reader never heard why the attempt failed.
+  // Announce it through #status before startPow() overwrites that line.
+  say("That didn't work, so we'll check your browser instead.");
   showResult("<p>That didn't work, so we'll check your browser instead.</p>");
   startPow('failed', true);
 }

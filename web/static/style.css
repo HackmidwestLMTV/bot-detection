@@ -3,7 +3,8 @@ main { max-width: 1260px; padding: 46px 36px 64px; margin: auto; }
 .breadcrumb { margin-bottom: 30px; font-size: 12px; color: var(--muted); display: flex; gap: 14px; align-items: center; }
 .breadcrumb b { color: var(--fg); }
 .checkout-layout { display: grid; grid-template-columns: 1fr 1.02fr; gap: 64px; align-items: start; }
-.hero h1 { font-size: clamp(48px,5.2vw,74px); line-height: .98; letter-spacing: -.065em; margin: 12px 0 18px; max-width: 450px; }
+.hero h1 { font-size: clamp(50px,5.6vw,82px); line-height: .92; letter-spacing: -.05em; margin: 14px 0 18px; max-width: 460px;
+  font-weight: 800; font-variation-settings: 'wdth' 88; text-wrap: balance; }
 .meta { color: var(--muted); font-size: 14px; }
 .poster { height: 290px; margin: 28px 0 24px; border-radius: var(--radius); background: #101d2c; position: relative; overflow: hidden; color: #fff; }
 .poster svg { position: absolute; width: 100%; height: 100%; }
@@ -15,10 +16,12 @@ main { max-width: 1260px; padding: 46px 36px 64px; margin: auto; }
 .price { font-size: 30px; font-weight: 750; letter-spacing: -1px; }
 .event-note { margin-top: 18px; display: flex; align-items: start; gap: 12px; font-size: 12px; color: var(--muted); }
 .event-note span { color: var(--accent); font-size: 17px; }
-.checkout-card { border: 1px solid var(--line); border-radius: 22px; background: var(--panel); padding: 28px; box-shadow: var(--shadow); }
+.checkout-card { border: 1px solid var(--line); border-top: 3px solid var(--ink); border-radius: 4px;
+  background: var(--panel); padding: 28px; box-shadow: var(--shadow); }
 .card-kicker { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
-.step { background: #f1f3f6; border: 1px solid var(--line); color: var(--muted); font: 600 11px var(--mono); padding: 5px 9px; border-radius: 6px; }
-h2 { font-size: 25px; line-height: 1.2; letter-spacing: -.045em; }
+.step { background: transparent; border: 1px solid var(--line); color: var(--muted); font: 500 11px var(--mono);
+  letter-spacing: .08em; padding: 5px 9px; border-radius: 0; }
+h2 { font-size: 27px; line-height: 1.15; letter-spacing: -.04em; font-weight: 700; font-variation-settings: 'wdth' 94; }
 .lede { margin-top: 10px; font-size: 13px; color: var(--muted); max-width: 380px; }
 .stage { position: relative; margin-top: 22px; }
 canvas { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; border: 0; padding: 0; border-radius: 12px; background: #10142a; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
@@ -28,12 +31,16 @@ canvas { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; border:
 .overlay.top { top: 12px; bottom: auto; }.overlay:empty{display:none}
 .badge { position: absolute; left: 10px; top: 10px; color: white; background: #384558; border-radius: 5px; padding: 3px 8px; font-size: 11px; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
-.btn { min-height: 46px; border: 1px solid var(--line); border-radius: 9px; padding: 11px 18px; font-weight: 650; flex: 1; }
-.btn-primary { width: 100%; background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 3px 8px #c84c0820; }
-.btn-primary:hover:not(:disabled){background:#a93d03}
+.btn { min-height: 48px; border: 1px solid var(--line); border-radius: 4px; padding: 12px 18px; font-weight: 650;
+  flex: 1; letter-spacing: -.01em; transition: background .15s ease, border-color .15s ease; }
+.btn-primary { width: 100%; background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: none; }
+.btn-primary:hover:not(:disabled){background:#953203;border-color:#953203}
 .btn-secondary { background: white; color: var(--fg); }.btn-secondary:hover:not(:disabled) { background: #f1f4f7; }
-.btn:disabled { background: #eef1f4; color: #727e8b; border-color: #e2e6ec; box-shadow: none; }
-.status { color: var(--muted); font-size: 13px; margin-top: 12px; }.status:empty{display:none}
+/* 'Locked until verified', not 'broken'. Dashed edge signals a pending step. */
+.btn:disabled { background: transparent; color: #7b8593; border: 1px dashed var(--line); box-shadow: none; }
+.status { color: var(--muted); font-size: 13px; margin-top: 12px; }
+/* Never display:none a live region -- SRs can miss the update. Collapse spacing instead. */
+.status:empty { margin-top: 0; }
 .reserve { margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--line); display: grid; gap: 12px; }
 .privacy-note { text-align: center; font-size: 11px; color: var(--muted); margin-top: 14px; }
 .linkish { background: transparent; border: 0; color: var(--muted); text-decoration: underline; font-size: 12px; padding: 8px 0; }
