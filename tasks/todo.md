@@ -171,5 +171,5 @@ the user later authorized committing everything and directly fixing cross-team c
 - [x] Start the smooth localhost ticket demo and LAN recorder for Luc's phone.
 - [x] Write root phases.md with current state, ownership, verified commands and next steps.
 - [x] Full local verification: 220 passed, two expected skips; frontend13 passed.
-- [ ] Finish CI, merge both reviewed PRs, share phases.md with P1.
+- [x] Finish CI, merge both reviewed PRs, share phases.md with P1.
 - [ ] Get Luc's real smooth-comet/touch feedback and the existing HTTPS endpoint.
